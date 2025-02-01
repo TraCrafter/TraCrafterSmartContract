@@ -1,3 +1,6 @@
 [submodule "Tracrafter/lib/forge-std"]
 	path = Tracrafter/lib/forge-std
 	url = https://github.com/foundry-rs/forge-std
+[submodule "Tracrafter/lib/openzeppelin-contracts"]
+	path = Tracrafter/lib/openzeppelin-contracts
+	url = https://github.com/OpenZeppelin/openzeppelin-contracts
