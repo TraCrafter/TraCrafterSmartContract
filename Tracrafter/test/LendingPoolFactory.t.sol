@@ -38,10 +38,10 @@ contract LendingPoolFactoryTest is Test {
         // jalankan fungsi lendingPool.createPosition();
         position = new Position(address(wbtc), address(usdc));
 
-        usdc.mint(alice, 100e18);
+        usdc.mint(alice, 100e6);
         wbtc.mint(alice, 1e8);
 
-        // usdc.mint(bob, 200e18);
+        // usdc.mint(bob, 200e6);
         wbtc.mint(bob, 2e8);
 
         vm.stopPrank();
@@ -62,8 +62,8 @@ contract LendingPoolFactoryTest is Test {
 
     function test_supply() public {
         vm.startPrank(alice);
-        IERC20(address(usdc)).approve(address(lendingPool), 100e18);
-        lendingPool.supply(100e18);
+        IERC20(address(usdc)).approve(address(lendingPool), 100e6);
+        lendingPool.supply(100e6);
         // console.log("Total Supply Assets: ", lendingPool.totalSupplyAssets());
         // console.log("Total Supply Shares: ", lendingPool.totalSupplyShares());
         // console.log("User Supply Shares: ", lendingPool.userSupplyShares(alice));
@@ -72,9 +72,9 @@ contract LendingPoolFactoryTest is Test {
 
     function test_withdraw() public {
         vm.startPrank(alice);
-        IERC20(address(usdc)).approve(address(lendingPool), 100e18);
-        lendingPool.supply(100e18);
-        lendingPool.withdraw(100e18);
+        IERC20(address(usdc)).approve(address(lendingPool), 100e6);
+        lendingPool.supply(100e6);
+        lendingPool.withdraw(100e6);
         // console.log("Total Supply Assets: ", lendingPool.totalSupplyAssets());
         // console.log("Total Supply Shares: ", lendingPool.totalSupplyShares());
         // console.log("User Supply Shares: ", lendingPool.userSupplyShares(alice));
@@ -96,38 +96,50 @@ contract LendingPoolFactoryTest is Test {
 
     function test_borrowByPosition() public {
         vm.startPrank(alice);
-        IERC20(address(usdc)).approve(address(lendingPool), 100e18);
-        lendingPool.supply(100e18);
-        console.log("Total Supply Assets: ", lendingPool.totalSupplyAssets());
-        console.log("Total Supply Shares: ", lendingPool.totalSupplyShares());
+        IERC20(address(usdc)).approve(address(lendingPool), 100e6);
+        lendingPool.supply(100e6);
+        console.log("Total Supply Assets:", lendingPool.totalSupplyAssets());
+        console.log("Total Supply Shares:", lendingPool.totalSupplyShares());
         console.log("User Supply Shares: ", lendingPool.userSupplyShares(alice));
         vm.stopPrank();
 
         vm.startPrank(bob);
         lendingPool.createPosition();
-        // Supply 1 WBTC as Collateral 
+        // Supply 1 WBTC as Collateral
         IERC20(address(wbtc)).approve(address(lendingPool), 1e8);
         lendingPool.supplyCollateralByPosition(1e8);
         // Borrow 90 USDC
-        lendingPool.borrowByPosition(90e10);
-        console.log("User Borrow Shares: ", lendingPool.userBorrowShares(bob));
+        lendingPool.borrowByPosition(9e6);
+        console.log("User Borrow Shares:   ", lendingPool.userBorrowShares(bob));
         // check bob balance
-        console.log("Bob USDC Balance: ", usdc.balanceOf(bob));
+        console.log("Bob USDC Balance:     ", usdc.balanceOf(bob));
         vm.stopPrank();
 
         vm.startPrank(bob);
         lendingPool.createPosition();
-        // Supply 1 WBTC as Collateral 
+        // Supply 1 WBTC as Collateral
         IERC20(address(wbtc)).approve(address(lendingPool), 1e8);
         lendingPool.supplyCollateralByPosition(1e8);
         // Borrow 90 USDC
-        lendingPool.borrowByPosition(90e10);
-        console.log("User Borrow Shares: ", lendingPool.userBorrowShares(bob));
+        lendingPool.borrowByPosition(9e6);
+        console.log("User Borrow Shares:  ", lendingPool.userBorrowShares(bob));
         // check bob balance
-        console.log("Bob USDC Balance: ", usdc.balanceOf(bob));
+        console.log("Bob USDC Balance:    ", usdc.balanceOf(bob));
         vm.stopPrank();
-        
+        //check total borrow shares
+        console.log("Total Borrow Shares: ", lendingPool.totalBorrowShares());
+        console.log("Total Supply Shares:", lendingPool.totalSupplyShares());
+
+        vm.warp(block.timestamp + 1 days);
+
+        lendingPool.accrueInterest();
+
+        console.log("totalSupplyAssets setelah 1 hari =", lendingPool.totalSupplyAssets());
+        console.log("totalBorrowAssets setelah 1 hari =", lendingPool.totalBorrowAssets());
+
         // check total supply shares
         // console.log("Total Supply Shares: ", lendingPool.totalSupplyShares());
     }
 }
+// 100000000000000000000
+// 100000000000000000000
