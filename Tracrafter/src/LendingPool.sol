@@ -73,8 +73,11 @@ contract LendingPool {
 
         uint256 interest = (interestPerYear * elapsedTime) / 365 days;
 
-        totalBorrowAssets += interest;
+        totalBorrowAssets += interest; // apakah harus nambah
         totalSupplyAssets += interest;
+        // addition
+        userBorrowShares[msg.sender] += interest;
+        totalBorrowShares += interest;
 
         lastAccrued = block.timestamp;
     }
@@ -124,5 +127,19 @@ contract LendingPool {
         accrueInterest();
 
         IERC20(token1).transfer(msg.sender, _amount);
+    }
+
+    function repayByPosition(uint256 shares) public {
+        _accrueInterest();
+
+        // uint256 amount = (shares * totalBorrowAssets) / totalBorrowShares;
+        // amount = (18 * 18.9) / 18
+        // 18,9
+
+        totalBorrowAssets -= shares; // amount
+        totalBorrowShares -= shares;
+        userBorrowShares[msg.sender] -= shares;
+
+        IERC20(token2).transferFrom(msg.sender, address(this), shares); // amount 
     }
 }

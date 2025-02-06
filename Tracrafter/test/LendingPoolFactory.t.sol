@@ -2,7 +2,7 @@
 pragma solidity ^0.8.13;
 
 import {Test, console} from "forge-std/Test.sol";
-import {IERC20} from "lib/openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
+import {IERC20} from "openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
 import {LendingPoolFactory} from "../src/LendingPoolFactory.sol";
 import {LendingPool} from "../src/LendingPool.sol";
 import {Position} from "../src/Position.sol";
@@ -16,10 +16,6 @@ contract LendingPoolFactoryTest is Test {
 
     MockUSDC public usdc;
     MockWBTC public wbtc;
-
-    // address public wbtc = 0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599; // collateral 1
-    // address public usdc = 0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48; // collateral 2
-    address public usdc2 = 0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48; // borrow
 
     address public alice = address(0x1);
     address public bob = address(0x2);
@@ -82,64 +78,119 @@ contract LendingPoolFactoryTest is Test {
     }
 
     function test_supplyCollateralByPosition() public {
-        test_supply();
-
         vm.startPrank(bob);
 
         lendingPool.createPosition();
-
+        // ERC20 Token, each decimal ->
+        // WBTC 8
+        // USDC 6
+        // ETH 18
         IERC20(address(wbtc)).approve(address(lendingPool), 1e8);
         lendingPool.supplyCollateralByPosition(1e8);
         // console.log("User Collaterals: ", lendingPool.userCollaterals(alice));
         vm.stopPrank();
     }
 
+    function helper_supply(address _user, uint256 _amount) public {
+        vm.startPrank(_user);
+        IERC20(address(usdc)).approve(address(lendingPool), _amount);
+        lendingPool.supply(_amount);
+        vm.stopPrank();
+    }
+
+    function helper_supplyCollateral(address _user, uint256 _amount) public {
+        vm.startPrank(_user);
+        lendingPool.createPosition();
+        IERC20(address(wbtc)).approve(address(lendingPool), _amount);
+        lendingPool.supplyCollateralByPosition(_amount);
+        vm.stopPrank();
+    }
+
+    function helper_borrow(address _user, uint256 _amount, bool _createPosition) public {
+        vm.startPrank(_user);
+        if (_createPosition) lendingPool.createPosition();
+        lendingPool.borrowByPosition(_amount);
+        vm.stopPrank();
+    }
+
+    function helper_repay(address _user, uint256 _amount) public {
+        vm.startPrank(_user);
+        IERC20(address(usdc)).approve(address(lendingPool), _amount);
+        lendingPool.repayByPosition(_amount);
+        vm.stopPrank();
+    }
+
     function test_borrowByPosition() public {
-        vm.startPrank(alice);
-        IERC20(address(usdc)).approve(address(lendingPool), 100e6);
-        lendingPool.supply(100e6);
+        // Alice supply 100 USDC
+        helper_supply(alice, 100e6);
+
         console.log("Total Supply Assets:", lendingPool.totalSupplyAssets());
         console.log("Total Supply Shares:", lendingPool.totalSupplyShares());
         console.log("User Supply Shares: ", lendingPool.userSupplyShares(alice));
-        vm.stopPrank();
+        console.log("----------------------------------------------------------------");
+        console.log("Bob WBTC Balance Before: ", wbtc.balanceOf(bob));
+        console.log("Bob USDC Balance Before: ", usdc.balanceOf(bob));
 
-        vm.startPrank(bob);
-        lendingPool.createPosition();
-        // Supply 1 WBTC as Collateral
-        IERC20(address(wbtc)).approve(address(lendingPool), 1e8);
-        lendingPool.supplyCollateralByPosition(1e8);
-        // Borrow 90 USDC
-        lendingPool.borrowByPosition(9e6);
+        helper_supplyCollateral(bob, 1e8);
+        console.log("Bob WBTC Balance After: ", wbtc.balanceOf(bob));
+        //BOB USDC balance before
+        console.log("----------------------------------------------------------------");
+        // Borrow 9 USDC
+        console.log("Bob USDC Balance Before: ", usdc.balanceOf(bob));
+        helper_borrow(bob, 9e6, true);
         console.log("User Borrow Shares:   ", lendingPool.userBorrowShares(bob));
-        // check bob balance
-        console.log("Bob USDC Balance:     ", usdc.balanceOf(bob));
-        vm.stopPrank();
+        console.log("Bob USDC Balance AFTER:     ", usdc.balanceOf(bob));
+        console.log("----------------------------------------------------------------");
+
+        console.log("----------------------------------------------------------------");
+        // Borrow 9 USDC
+        console.log("Bob USDC Balance Before II: ", usdc.balanceOf(bob));
+        helper_borrow(bob, 9e6, false);
+        console.log("User Borrow Shares II:   ", lendingPool.userBorrowShares(bob));
+        console.log("Bob USDC Balance AFTER II:     ", usdc.balanceOf(bob));
+        console.log("----------------------------------------------------------------");
+
+        // //check total borrow shares
+        console.log("----------------------------------------------------------------");
+
+        console.log("totalSupplyAssets setelah 0 hari =", lendingPool.totalSupplyAssets());
+        console.log("totalBorrowAssets setelah 0 hari =", lendingPool.totalBorrowAssets());
+
+        console.log("----------------------------------------------------------------");
+
+        vm.warp(block.timestamp + 365 days);
 
         vm.startPrank(bob);
-        lendingPool.createPosition();
-        // Supply 1 WBTC as Collateral
-        IERC20(address(wbtc)).approve(address(lendingPool), 1e8);
-        lendingPool.supplyCollateralByPosition(1e8);
-        // Borrow 90 USDC
-        lendingPool.borrowByPosition(9e6);
-        console.log("User Borrow Shares:  ", lendingPool.userBorrowShares(bob));
-        // check bob balance
-        console.log("Bob USDC Balance:    ", usdc.balanceOf(bob));
-        vm.stopPrank();
-        //check total borrow shares
-        console.log("Total Borrow Shares: ", lendingPool.totalBorrowShares());
-        console.log("Total Supply Shares:", lendingPool.totalSupplyShares());
-
-        vm.warp(block.timestamp + 1 days);
-
         lendingPool.accrueInterest();
+        vm.stopPrank();
 
-        console.log("totalSupplyAssets setelah 1 hari =", lendingPool.totalSupplyAssets());
-        console.log("totalBorrowAssets setelah 1 hari =", lendingPool.totalBorrowAssets());
+        console.log("totalSupplyAssets setelah 365 hari =", lendingPool.totalSupplyAssets()); // 100,9
+        console.log("totalBorrowAssets setelah 365 hari =", lendingPool.totalBorrowAssets()); // 18,9
+        console.log("user borrow shares setelah 365 hari =", lendingPool.userBorrowShares(bob));
 
-        // check total supply shares
-        // console.log("Total Supply Shares: ", lendingPool.totalSupplyShares());
+        console.log("----------------------------------------------------------------");
+
+        // Bob USDC Balance
+        console.log("Bob USDC Balance: ", usdc.balanceOf(bob));
+        console.log("----------------------------------------------------------------");
+
+        usdc.mint(bob, 100e6);
+        helper_repay(bob, 18e6);
+        console.log("----------------------------------------------------------------");
+        console.log("----------------------------------------------------------------");
+        console.log("Bob repay USDC");
+        console.log("----------------------------------------------------------------");
+        // Check Bob USDC Shares
+        console.log("Bob USDC Shares: ", lendingPool.userBorrowShares(bob));
+        console.log("Total Borrow Shares: ", lendingPool.totalBorrowShares());
+        console.log("Total Borrow Assets: ", lendingPool.totalBorrowAssets());
     }
 }
 // 100000000000000000000
 // 100000000000000000000
+
+// TRADE, COLLATERAL 2, PRICEFEED, LIKUIDASI
+// Borrow 70% seharga assets
+
+// Repay by collateral
+// BTC naik -> kenaikan asset buat bayar hutang
