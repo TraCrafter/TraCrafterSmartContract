@@ -1,11 +1,14 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.13;
 
-import {IERC20} from "lib/openzeppelin-contracts/contracts/token/ERC20/ERC20.sol";
+import {IERC20} from "openzeppelin-contracts/contracts/token/ERC20/ERC20.sol";
 import {Position} from "./Position.sol";
+import {PriceFeed} from "./PriceFeed.sol";
 
 contract LendingPool {
     Position public position;
+    PriceFeed public priceFeed;
+
     uint256 public totalSupplyAssets;
     uint256 public totalSupplyShares;
     uint256 public totalBorrowAssets;
@@ -18,12 +21,14 @@ contract LendingPool {
 
     address public token1; // collateral(?)
     address public token2; // borrow(?)
+
     uint256 public lastAccrued;
 
     constructor(address _token1, address _token2) {
         token1 = _token1;
         token2 = _token2;
         lastAccrued = block.timestamp;
+        // priceFeed = new PriceFeed(token1, token2); token pricefeed beda
     }
 
     function createPosition() public {
@@ -140,6 +145,16 @@ contract LendingPool {
         totalBorrowShares -= shares;
         userBorrowShares[msg.sender] -= shares;
 
-        IERC20(token2).transferFrom(msg.sender, address(this), shares); // amount 
+        IERC20(token2).transferFrom(msg.sender, address(this), shares); // amount
+    }
+
+    function repayWithCollateralsByPosition(uint256 shares) public {
+        _accrueInterest();
+
+        totalBorrowAssets -= shares;
+        totalBorrowShares -= shares;
+        userBorrowShares[msg.sender] -= shares;
+
+        IERC20(token2).transferFrom(msg.sender, address(this), shares);
     }
 }

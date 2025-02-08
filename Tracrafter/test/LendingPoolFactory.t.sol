@@ -8,17 +8,21 @@ import {LendingPool} from "../src/LendingPool.sol";
 import {Position} from "../src/Position.sol";
 import {MockUSDC} from "../src/MockUSDC.sol";
 import {MockWBTC} from "../src/MockWBTC.sol";
+import {PriceFeed} from "../src/PriceFeed.sol";
 
 contract LendingPoolFactoryTest is Test {
     LendingPoolFactory public lendingPoolFactory;
     LendingPool public lendingPool;
     Position public position;
+    PriceFeed public priceFeed;
 
     MockUSDC public usdc;
     MockWBTC public wbtc;
 
     address public alice = address(0x1);
     address public bob = address(0x2);
+
+    bool priceFeedIsActive = false;
 
     function setUp() public {
         usdc = new MockUSDC();
@@ -33,6 +37,7 @@ contract LendingPoolFactoryTest is Test {
 
         // jalankan fungsi lendingPool.createPosition();
         position = new Position(address(wbtc), address(usdc));
+        if (priceFeedIsActive) priceFeed = new PriceFeed(address(wbtc), address(usdc));
 
         usdc.mint(alice, 100e6);
         wbtc.mint(alice, 1e8);
@@ -150,7 +155,6 @@ contract LendingPoolFactoryTest is Test {
         console.log("Bob USDC Balance AFTER II:     ", usdc.balanceOf(bob));
         console.log("----------------------------------------------------------------");
 
-        // //check total borrow shares
         console.log("----------------------------------------------------------------");
 
         console.log("totalSupplyAssets setelah 0 hari =", lendingPool.totalSupplyAssets());
@@ -167,16 +171,30 @@ contract LendingPoolFactoryTest is Test {
         console.log("totalSupplyAssets setelah 365 hari =", lendingPool.totalSupplyAssets()); // 100,9
         console.log("totalBorrowAssets setelah 365 hari =", lendingPool.totalBorrowAssets()); // 18,9
         console.log("user borrow shares setelah 365 hari =", lendingPool.userBorrowShares(bob));
+    }
+
+    function test_repayByPosition() public {
+        helper_supply(alice, 100e6);
+        helper_supplyCollateral(bob, 1e8);
+        helper_borrow(bob, 9e6, true);
+        helper_borrow(bob, 9e6, false);
+
+        vm.warp(block.timestamp + 365 days);
+
+        console.log("totalSupplyAssets setelah 365 hari =", lendingPool.totalSupplyAssets()); // 100,9
+        console.log("totalBorrowAssets setelah 365 hari =", lendingPool.totalBorrowAssets()); // 18,9
+        console.log("user borrow shares setelah 365 hari =", lendingPool.userBorrowShares(bob));
 
         console.log("----------------------------------------------------------------");
 
+        vm.startPrank(bob);
+        lendingPool.accrueInterest();
+        vm.stopPrank();
         // Bob USDC Balance
         console.log("Bob USDC Balance: ", usdc.balanceOf(bob));
         console.log("----------------------------------------------------------------");
-
         usdc.mint(bob, 100e6);
         helper_repay(bob, 18e6);
-        console.log("----------------------------------------------------------------");
         console.log("----------------------------------------------------------------");
         console.log("Bob repay USDC");
         console.log("----------------------------------------------------------------");
@@ -184,6 +202,19 @@ contract LendingPoolFactoryTest is Test {
         console.log("Bob USDC Shares: ", lendingPool.userBorrowShares(bob));
         console.log("Total Borrow Shares: ", lendingPool.totalBorrowShares());
         console.log("Total Borrow Assets: ", lendingPool.totalBorrowAssets());
+    }
+
+    function test_priceFeed() public {
+        if (priceFeedIsActive) {
+            console.log("BTC Price: ", priceFeed.priceBTC());
+            console.log("USDC Price: ", priceFeed.priceWETH());
+            console.log("BTC Decimal: ", priceFeed.getQuoteDecimal());
+            console.log("USDC Decimal: ", priceFeed.getBaseDecimal());
+            console.log("BTC Description: ", priceFeed.getQuoteDescription());
+            console.log("USDC Description: ", priceFeed.getBaseDescription());
+        }
+        // 91,527.61777140
+        // 0.9994597
     }
 }
 // 100000000000000000000
