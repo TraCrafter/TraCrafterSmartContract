@@ -6,8 +6,10 @@ import {LendingPool} from "./LendingPool.sol";
 
 contract LendingPoolFactory {
     // collateral, borrow
-    function createLendingPool(address LendingPoolToken1, address LendingPoolToken2) public returns (address) {
-        LendingPool lendingPool = new LendingPool(LendingPoolToken1, LendingPoolToken2);
+    // oracle statis(?)
+    // cuman owner yang bisa atur dan pasang address nya
+    function createLendingPool(address LendingPoolToken1, address LendingPoolToken2, address oracle, uint256 LTV) public returns (address) {
+        LendingPool lendingPool = new LendingPool(LendingPoolToken1, LendingPoolToken2, oracle, LTV);
         return address(lendingPool);
     }
 }
