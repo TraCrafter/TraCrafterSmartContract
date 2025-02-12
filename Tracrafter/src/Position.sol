@@ -16,6 +16,8 @@ contract Position {
 
     TokenOwner[] public tokenOwner;
 
+    mapping(address => uint256) public tokenBalance;
+
     constructor(address _collateral1, address _borrow) {
         collateral1 = _collateral1;
         borrowAssets = _borrow;
@@ -29,10 +31,12 @@ contract Position {
 
         if (tokenOwnerLength == 0) {
             tokenOwner.push(TokenOwner(_token, _amount));
+            tokenBalance[_token] = _amount;
         } else {
             for (uint256 i = 0; i < tokenOwnerLength; i++) {
                 if (tokenOwner[i].token == _token) {
                     tokenOwner[i].amount += _amount;
+                    tokenBalance[_token] += _amount;
                 }
             }
         }
@@ -48,5 +52,9 @@ contract Position {
 
     function getTokenOwnerAmount(uint256 _index) public view returns (uint256) {
         return tokenOwner[_index].amount;
+    }
+
+    function getTokenBalance(address _token) public view returns (uint256) {
+        return tokenBalance[_token];
     }
 }

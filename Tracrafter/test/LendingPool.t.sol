@@ -3,6 +3,7 @@ pragma solidity ^0.8.13;
 
 import {Test, console} from "forge-std/Test.sol";
 import {IERC20} from "openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
+import {IERC20Metadata} from "openzeppelin-contracts/contracts/token/ERC20/extensions/IERC20Metadata.sol";
 import {LendingPoolFactory} from "../src/LendingPoolFactory.sol";
 import {LendingPool} from "../src/LendingPool.sol";
 import {Position} from "../src/Position.sol";
@@ -10,7 +11,8 @@ import {Position} from "../src/Position.sol";
 import {PriceFeed} from "../src/PriceFeed.sol";
 
 interface IOracle {
-    function getPrice() external view returns (uint256);
+    function getPrice(address _collateral, address _borrow) external view returns (uint256);
+    function getQuoteDecimal(address _token) external view returns (uint256);
 }
 
 contract LendingPoolFactoryTest is Test {
@@ -36,33 +38,34 @@ contract LendingPoolFactoryTest is Test {
 
     address ethUsd = 0x5f4eC3Df9cbd43714FE2740f5E3616155c5b8419; // ETH/USD
     address usdcUsd = 0x8fFfFfd4AfB6115b954Bd326cbe7B4BA576818f6; // USDC/USD
-    address pepeUsd = 0x4ffC43a60e009B551865A93d232E33Fce9f01507; // SOL/USD
+    // address pepeUsd = 0x4ffC43a60e009B551865A93d232E33Fce9f01507; // SOL/USD
 
     function setUp() public {
         priceFeed = new PriceFeed();
         oracle = IOracle(address(priceFeed));
 
         vm.startPrank(alice);
-        vm.createSelectFork("https://eth-mainnet.g.alchemy.com/v2/npJ88wr-vv5oxDKlp0mQYSfVXfN2nKif", 21197642);
+        vm.createSelectFork("https://eth-mainnet.g.alchemy.com/v2/npJ88wr-vv5oxDKlp0mQYSfVXfN2nKif", 21829147);
         lendingPoolFactory = new LendingPoolFactory();
-
         lendingPool = new LendingPool(address(weth), address(usdc), address(oracle), 7e17);
-
         position = new Position(address(weth), address(usdc));
-
         vm.stopPrank();
 
-        deal(usdc, alice, 1000e6);
+        vm.startPrank(bob);
+        lendingPool.createPosition();
+        vm.stopPrank();
+
+        deal(usdc, alice, 10000e6);
         deal(weth, alice, 1e18);
 
         deal(usdc, bob, 2000e6);
         deal(weth, bob, 2e18);
-    }
 
-    function helper_addPrice() public {
         priceFeed.addPriceFeed("ETH/USD", weth, ethUsd);
         priceFeed.addPriceFeed("USDC/USD", usdc, usdcUsd);
-        priceFeed.addPriceFeed("PEPE/USD", pepe, pepeUsd);
+        priceFeed.addPriceManual("PEPE/USD", pepe, 0.00000954 * 10 ** 18, 18);
+        // 522,974771273756619958
+        // 522,97477127
     }
 
     function helper_supply(address _user, address _token, uint256 _amount) public {
@@ -102,22 +105,24 @@ contract LendingPoolFactoryTest is Test {
     }
 
     function test_borrow() public {
+        // bob borrow 8000 usdc
+        uint256 borrowed = 1900e6;
+
         // alice supply 1000 usdc
-        helper_supply(alice, usdc, 1000e6);
+        helper_supply(alice, usdc, 10000e6);
 
         vm.startPrank(bob);
         // bob supply 1 WETH as collateral
         IERC20(weth).approve(address(lendingPool), 1e18);
         lendingPool.supplyCollateralByPosition(1e18);
 
-        vm.expectRevert(LendingPool.InsufficientLiquidity.selector);
+        vm.expectRevert(LendingPool.InsufficientCollateral.selector);
         lendingPool.borrowByPosition(10_000e6);
 
         // bob borrow usdc
-        lendingPool.borrowByPosition(900e6);
+        vm.expectRevert(LendingPool.InsufficientCollateral.selector);
+        lendingPool.borrowByPosition(borrowed);
         vm.stopPrank();
-
-        console.log("bob balance: ", IERC20(usdc).balanceOf(bob));
     }
 
     function test_withdraw() public {
@@ -189,28 +194,28 @@ contract LendingPoolFactoryTest is Test {
     }
 
     function test_swap() public {
-        helper_addPrice();
-        console.log("test price feed", priceFeed.priceCollateral(pepe));
+        console.log("test price feed PEPE", priceFeed.priceCollateral(pepe));
+        console.log("test price feed WETH", priceFeed.priceCollateral(weth));
+
         vm.startPrank(bob);
         IERC20(weth).approve(address(lendingPool), 1.2e18); // awalnya deal 2 ether, jadi 0,8 ether
         lendingPool.supplyCollateralByPosition(1.2e18);
         vm.stopPrank();
+
         // berkurang udah bisa supply collateral
         console.log("bob balance weth", IERC20(weth).balanceOf(bob)); // 800000000000000000 = 0,8 ether
         vm.startPrank(bob);
-        lendingPool.createPosition();
         // supply 1,2 ether dikurangi 0.5 ether buat swap
-        uint256 amountOut = lendingPool.swapByPosition(pepe, 0.5e18, 0);
+        uint256 amountOut = lendingPool.swapByPosition(pepe, 0.2e18, 0);
         console.log(amountOut);
-        console.log(lendingPool.getTokenLengthByPosition());
-        console.log(lendingPool.getTokenAddressByPosition(0));
-        console.log(lendingPool.getTokenAmountByPosition(0));
-        console.log(lendingPool.getTokenDecimalByPosition(0));
         vm.stopPrank();
 
-        vm.startPrank(alice);
-        vm.expectRevert(LendingPool.PositionNotCreated.selector);
-        console.log("alice position", lendingPool.getTokenLengthByPosition());
-        vm.stopPrank();
+        console.log("Bob's Collateral", lendingPool.userCollaterals(bob)); // 1 ether
+
+        uint256 totalPepe = priceFeed.priceCollateral(pepe) * amountOut / 1e18;
+        console.log("Price of PEPE/USD", totalPepe); // 262.32009831
+        uint256 totalWETH = priceFeed.priceCollateral(weth) * lendingPool.userCollaterals(bob) / 1e18;
+        console.log("Price of WETH/USD", totalWETH); // 3133.57000000
+        
     }
 }

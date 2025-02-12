@@ -21,7 +21,8 @@ interface ISwapRouter {
 }
 
 interface IOracle {
-    function getPrice() external view returns (uint256);
+    function getPrice(address _collateral, address _borrow) external view returns (uint256);
+    function getQuoteDecimal(address _token) external view returns (uint256);
 }
 
 contract LendingPool {
@@ -137,19 +138,11 @@ contract LendingPool {
         lastAccrued = block.timestamp;
     }
 
-    function supplyCollateralByPosition(
-        // uint256 _position,
-        // uint256 amount0,
-        uint256 amount
-    ) public {
+    function supplyCollateralByPosition(uint256 amount) public positionRequired {
         if (amount == 0) revert ZeroAmount();
-        // if (addressPosition[msg.sender] != address(0)) {
         accrueInterest();
         userCollaterals[msg.sender] += amount;
         IERC20(collateralToken).transferFrom(msg.sender, address(this), amount);
-        // } else {
-        //     revert PositionUnavailable();
-        // }
     }
 
     function withdrawCollateral(uint256 amount) public {
@@ -160,25 +153,36 @@ contract LendingPool {
 
         userCollaterals[msg.sender] -= amount;
 
-        // _isHealthy(msg.sender);
-
         IERC20(collateralToken).transfer(msg.sender, amount);
     }
 
     function _isHealthy(address user) internal view {
-        uint256 collateralPrice = IOracle(oracle).getPrice();
+        // addition isHealthy
+        uint256 positionValue = 0;
+        if (addressPosition[msg.sender] != address(0)) {
+            uint256 positionLength = Position(addressPosition[msg.sender]).getTokenOwnerLength();
+            for (uint256 i = 0; i < positionLength; i++) {
+                address tokenAddress = Position(addressPosition[msg.sender]).getTokenOwnerAddress(i);
+
+                uint256 positionPrice = IOracle(oracle).getPrice(tokenAddress, borrowToken);
+                uint256 positionDecimal = IOracle(oracle).getQuoteDecimal(tokenAddress);
+                positionValue += position.getTokenBalance(tokenAddress) * positionPrice / positionDecimal;
+            }
+        }
+
+        uint256 collateralPrice = IOracle(oracle).getPrice(collateralToken, borrowToken);
         uint256 collateralDecimals = 10 ** IERC20Metadata(collateralToken).decimals(); // 1e18
 
-        uint256 borrowed = (userBorrowShares[user] * totalBorrowAssets) / totalBorrowShares;
+        uint256 borrowed =
+            userBorrowShares[user] != 0 ? (userBorrowShares[user] * totalBorrowAssets) / totalBorrowShares : 0; // karena sebelumnya jika 0 * 0 / 0 itu tidak bisa, maka harus diprotect kalau userBorrowShares[user] == 0 langsung aja borrow kasih nilai 0
 
-        uint256 collateralValue = (userCollaterals[user] * collateralPrice) / collateralDecimals;
-        uint256 maxBorrow = (collateralValue * ltv) / 1e18;
+        uint256 collateralValue = (userCollaterals[user] * collateralPrice) / collateralDecimals; // 1e18 * 2633.51578211 /  1e18
+        uint256 maxBorrow = ((collateralValue) * ltv) / 1e18; // 2633.51578211 * 70%
+        // uint256 maxBorrow = ((collateralValue + positionValue) * ltv) / 1e18; // 2633.51578211 * 70%
 
         if (borrowed > maxBorrow) revert InsufficientCollateral();
     }
-
-    function borrowByPosition(uint256 amount) public {
-        // if (addressPosition[msg.sender] != address(0)) {
+    function borrowByPosition(uint256 amount) public positionRequired {
         _accrueInterest();
         uint256 shares = 0;
         if (totalBorrowShares == 0) {
@@ -190,17 +194,14 @@ contract LendingPool {
         userBorrowShares[msg.sender] += shares;
         totalBorrowShares += shares;
         totalBorrowAssets += amount;
-        // _isHealthy(msg.sender);
+        _isHealthy(msg.sender);
         if (totalBorrowAssets > totalSupplyAssets) {
             revert InsufficientLiquidity();
         }
         IERC20(borrowToken).transfer(msg.sender, amount);
-        // } else {
-        //     revert();
-        // }
     }
 
-    function repayByPosition(uint256 shares) public {
+    function repayByPosition(uint256 shares) public positionRequired {
         if (shares == 0) revert ZeroAmount();
 
         _accrueInterest();
@@ -236,6 +237,7 @@ contract LendingPool {
 
     function swapByPosition(address _tokenDestination, uint256 amountIn, uint256 amountOutMin)
         public
+        positionRequired
         returns (uint256 amountOut)
     {
         if (amountIn == 0) revert ZeroAmount();
@@ -256,7 +258,6 @@ contract LendingPool {
 
         collateralToken = _tokenDestination;
         amountOut = ISwapRouter(router).exactInputSingle(params);
-
         position.swapToken(_tokenDestination, amountOut);
     }
 
@@ -272,7 +273,7 @@ contract LendingPool {
         return Position(addressPosition[msg.sender]).getTokenOwnerAmount(_index);
     }
 
-    function getTokenDecimalByPosition(uint256 _index) public view positionRequired returns (uint256){
+    function getTokenDecimalByPosition(uint256 _index) public view positionRequired returns (uint256) {
         return IERC20Metadata(Position(addressPosition[msg.sender]).getTokenOwnerAddress(_index)).decimals();
     }
 }
