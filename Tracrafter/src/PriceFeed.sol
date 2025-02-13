@@ -10,15 +10,29 @@ interface IAggregatorV3 {
 
     function version() external view returns (uint256);
 
-    function getRoundData(uint80 _roundId)
+    function getRoundData(
+        uint80 _roundId
+    )
         external
         view
-        returns (uint80 roundId, int256 answer, uint256 startedAt, uint256 updatedAt, uint80 answeredInRound);
+        returns (
+            uint80 roundId,
+            int256 answer,
+            uint256 startedAt,
+            uint256 updatedAt,
+            uint80 answeredInRound
+        );
 
     function latestRoundData()
         external
         view
-        returns (uint80 roundId, int256 answer, uint256 startedAt, uint256 updatedAt, uint80 answeredInRound);
+        returns (
+            uint80 roundId,
+            int256 answer,
+            uint256 startedAt,
+            uint256 updatedAt,
+            uint80 answeredInRound
+        );
 }
 
 contract PriceFeed {
@@ -54,8 +68,23 @@ contract PriceFeed {
     PriceLists[] public priceLists;
     address owner;
 
+    event AddPriceFeed(string name, address token, address priceFeed);
+    event EditPriceFeed(string name, address peiceFeed, uint256 index);
+    event AddPairPriceCollateral(address collateral, address priceFeed);
+    event AddPairPriceBorrow(address borrow, address priceFeed);
+    event AddPriceManual(
+        string name,
+        address token,
+        uint256 price,
+        uint256 decimal,
+        uint256 updatedAt
+    );
+
     modifier onlyOwner() {
-        require(msg.sender == owner || subOwner[msg.sender], "Only owner can call this function");
+        require(
+            msg.sender == owner || subOwner[msg.sender],
+            "Only owner can call this function"
+        );
         _;
     }
 
@@ -64,28 +93,49 @@ contract PriceFeed {
         subOwner[msg.sender] = true;
     }
 
-    function addPriceFeed(string memory _name, address _token, address _priceAddress) public onlyOwner {
+    function addPriceFeed(
+        string memory _name,
+        address _token,
+        address _priceAddress
+    ) public onlyOwner {
         priceLists.push(PriceLists(_name, _priceAddress));
         quoteFeed[_token] = _priceAddress;
         baseFeed[_token] = _priceAddress;
+
+        emit AddPriceFeed(_name, _token, _priceAddress);
     }
 
-    function editPriceFeed(string memory _name, address _priceAddress, uint256 _index) public onlyOwner {
+    function editPriceFeed(
+        string memory _name,
+        address _priceAddress,
+        uint256 _index
+    ) public onlyOwner {
         priceLists[_index] = PriceLists(_name, _priceAddress);
+
+        emit EditPriceFeed(_name, _priceAddress, _index);
     }
 
-    function addPairPriceCollateral(address _collateral, address _priceAddress) public {
+    function addPairPriceCollateral(
+        address _collateral,
+        address _priceAddress
+    ) public {
         quoteFeed[_collateral] = _priceAddress;
+
+        emit AddPairPriceCollateral(_collateral, _priceAddress);
     }
 
     function addPairPriceBorrow(address _borrow, address _priceAddress) public {
         baseFeed[_borrow] = _priceAddress;
+
+        emit AddPairPriceBorrow(_borrow, _priceAddress);
     }
 
-    function addPriceManual(string memory _name, address _tokenAddres, uint256 _price, uint256 _decimal)
-        public
-        onlyOwner
-    {
+    function addPriceManual(
+        string memory _name,
+        address _tokenAddres,
+        uint256 _price,
+        uint256 _decimal
+    ) public onlyOwner {
         if (tokenPrices[_tokenAddres].startedAt != 0) {
             tokenPrices[_tokenAddres] = PriceManual({
                 name: tokenPrices[_tokenAddres].name,
@@ -95,31 +145,50 @@ contract PriceFeed {
                 updatedAt: block.timestamp
             });
         } else {
-            tokenPrices[_tokenAddres] = PriceManual(_name, _price, _decimal, block.timestamp, block.timestamp);
+            tokenPrices[_tokenAddres] = PriceManual(
+                _name,
+                _price,
+                _decimal,
+                block.timestamp,
+                block.timestamp
+            );
         }
+
+        emit AddPriceManual(
+            _name,
+            _tokenAddres,
+            _price,
+            _decimal,
+            block.timestamp
+        );
     }
 
-    function getPrice(address _collateral, address _borrow) public view returns (uint256) {
+    function getPrice(
+        address _collateral,
+        address _borrow
+    ) public view returns (uint256) {
         uint256 quotePrice;
         uint256 basePrice;
         uint256 decimal;
         if (tokenPrices[_collateral].startedAt != 0) {
             quotePrice = tokenPrices[_collateral].price;
         } else {
-            (, int256 quote,,,) = IAggregatorV3(quoteFeed[_collateral]).latestRoundData();
+            (, int256 quote, , , ) = IAggregatorV3(quoteFeed[_collateral])
+                .latestRoundData();
             quotePrice = uint256(quote);
         }
         if (tokenPrices[_borrow].startedAt != 0) {
             quotePrice = tokenPrices[_borrow].price;
             decimal = 10 ** tokenPrices[_borrow].decimal;
         } else {
-            (, int256 base,,,) = IAggregatorV3(baseFeed[_borrow]).latestRoundData();
+            (, int256 base, , , ) = IAggregatorV3(baseFeed[_borrow])
+                .latestRoundData();
             decimal = 10 ** IERC20Metadata(_borrow).decimals(); // 1e18
             basePrice = uint256(base);
         }
         if (quotePrice == 0) revert QuotePriceZero();
         if (basePrice == 0) revert BasePriceZero();
-        return quotePrice * decimal / basePrice;
+        return (quotePrice * decimal) / basePrice;
     }
 
     function priceCollateral(address _token) public view returns (uint256) {
@@ -127,7 +196,8 @@ contract PriceFeed {
         if (tokenPrices[_token].startedAt != 0) {
             quotePrice = tokenPrices[_token].price;
         } else {
-            (, int256 quote,,,) = IAggregatorV3(quoteFeed[_token]).latestRoundData();
+            (, int256 quote, , , ) = IAggregatorV3(quoteFeed[_token])
+                .latestRoundData();
             quotePrice = uint256(quote);
         }
         return quotePrice;
@@ -138,7 +208,8 @@ contract PriceFeed {
         if (tokenPrices[_token].startedAt != 0) {
             quotePrice = tokenPrices[_token].price;
         } else {
-            (, int256 quote,,,) = IAggregatorV3(quoteFeed[_token]).latestRoundData();
+            (, int256 quote, , , ) = IAggregatorV3(quoteFeed[_token])
+                .latestRoundData();
             quotePrice = uint256(quote);
         }
         return quotePrice;
@@ -164,7 +235,9 @@ contract PriceFeed {
         return uint256(decimal);
     }
 
-    function getQuoteDescription(address _token) public view returns (string memory) {
+    function getQuoteDescription(
+        address _token
+    ) public view returns (string memory) {
         string memory name;
         if (tokenPrices[_token].startedAt != 0) {
             name = tokenPrices[_token].name;
@@ -174,7 +247,9 @@ contract PriceFeed {
         return name;
     }
 
-    function getBaseDescription(address _token) public view returns (string memory) {
+    function getBaseDescription(
+        address _token
+    ) public view returns (string memory) {
         string memory name;
         if (tokenPrices[_token].startedAt != 0) {
             name = tokenPrices[_token].name;

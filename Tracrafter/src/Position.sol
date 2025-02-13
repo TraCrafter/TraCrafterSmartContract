@@ -18,13 +18,18 @@ contract Position {
 
     mapping(address => uint256) public tokenBalance;
 
+    event Liquidate(address user);
+    event SwapToken(address user, address token, uint256 amount);
+
     constructor(address _collateral1, address _borrow) {
         collateral1 = _collateral1;
         borrowAssets = _borrow;
         owner = msg.sender;
     }
 
-    function liquidate() public {}
+    function liquidate() public {
+        emit Liquidate(owner);
+    }
 
     function swapToken(address _token, uint256 _amount) public {
         uint256 tokenOwnerLength = tokenOwner.length;
@@ -40,13 +45,17 @@ contract Position {
                 }
             }
         }
+
+        emit SwapToken(msg.sender, _token, _amount);
     }
 
     function getTokenOwnerLength() public view returns (uint256) {
         return tokenOwner.length;
     }
 
-    function getTokenOwnerAddress(uint256 _index) public view returns (address) {
+    function getTokenOwnerAddress(
+        uint256 _index
+    ) public view returns (address) {
         return tokenOwner[_index].token;
     }
 
