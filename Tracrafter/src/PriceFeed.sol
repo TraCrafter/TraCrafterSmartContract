@@ -124,7 +124,7 @@ contract PriceFeed {
             quotePrice = uint256(quote);
         }
         if (tokenPrices[_borrow].startedAt != 0) {
-            quotePrice = tokenPrices[_borrow].price;
+            basePrice = tokenPrices[_borrow].price;
             decimal = 10 ** tokenPrices[_borrow].decimal;
         } else {
             (, int256 base,,,) = IAggregatorV3(baseFeed[_borrow]).latestRoundData();

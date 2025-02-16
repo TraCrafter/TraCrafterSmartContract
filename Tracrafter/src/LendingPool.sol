@@ -28,7 +28,7 @@ interface IOracle {
 }
 
 interface TokenSwap {
-    function mint(address _to, uint256 _amount) external view returns (uint256);
+    function mint(address _to, uint256 _amount) external;
 }
 
 contract LendingPool {
@@ -172,13 +172,13 @@ contract LendingPool {
 
     function withdrawCollateral(uint256 amount) public {
         if (amount == 0) revert ZeroAmount();
-        if (amount > userCollaterals[msg.sender]) {
-            revert InsufficientCollateral();
-        }
+        if (amount > userCollaterals[msg.sender]) revert InsufficientCollateral();
 
         _accrueInterest();
 
         userCollaterals[msg.sender] -= amount;
+
+        _isHealthy(msg.sender);
 
         IERC20(collateralToken).transfer(msg.sender, amount);
 
@@ -206,8 +206,8 @@ contract LendingPool {
             userBorrowShares[user] != 0 ? (userBorrowShares[user] * totalBorrowAssets) / totalBorrowShares : 0; // karena sebelumnya jika 0 * 0 / 0 itu tidak bisa, maka harus diprotect kalau userBorrowShares[user] == 0 langsung aja borrow kasih nilai 0
 
         uint256 collateralValue = (userCollaterals[user] * collateralPrice) / collateralDecimals; // 1e18 * 2633.51578211 /  1e18
-        uint256 maxBorrow = ((collateralValue) * ltv) / 1e18; // 2633.51578211 * 70%
-        // uint256 maxBorrow = ((collateralValue + positionValue) * ltv) / 1e18; // 2633.51578211 * 70%
+        // uint256 maxBorrow = ((collateralValue) * ltv) / 1e18; // 2633.51578211 * 70%
+        uint256 maxBorrow = ((collateralValue + positionValue) * ltv) / 1e18; // 2633.51578211 * 70%
 
         if (borrowed > maxBorrow) revert InsufficientCollateral();
     }
@@ -306,19 +306,21 @@ contract LendingPool {
     {
         if (amountIn == 0) revert ZeroAmount();
 
-        userCollaterals[msg.sender] -= amountIn;
-        IERC20(collateralToken).approve(address(this), amountIn);
+        if (_tokenFrom == borrowToken) {
+            userCollaterals[msg.sender] -= amountIn;
+        }
 
-        // nuker eth ke pepe -> price = harga pair all with usdc
-        // nuker eth ke usdc -> usdc ke pepe
-        // nuker eth ke pepe -> dapat sejumlah pepe
         (uint256 _realPrice,) = IOracle(oracle).getPriceTrade(_tokenTo, _tokenFrom);
         amountOut = amountIn * IOracle(oracle).getQuoteDecimal(_tokenTo) / _realPrice;
 
-        // if (_tokenTo == borrowToken) {} else {
         // mint token pepe, sejumlah pepe, dikirim ke
-        TokenSwap(_tokenTo).mint(msg.sender, amountOut);
-        // }
+        TokenSwap(_tokenTo).mint(address(this), amountOut);
+
+        if (_tokenTo == borrowToken) {
+            userCollaterals[msg.sender] += amountOut;
+        } else {
+            position.swapToken(_tokenTo, amountOut);
+        }
 
         emit SwapByPosition(msg.sender, collateralToken, _tokenTo, amountIn, amountOut);
     }
@@ -339,3 +341,9 @@ contract LendingPool {
         return IERC20Metadata(Position(addressPosition[msg.sender]).getTokenOwnerAddress(_index)).decimals();
     }
 }
+
+// custom swap, based on pricefeed
+// bikin pricefeed cronjob
+// waktu create lendingpool bisa, tapi ga verify, apakah karena ga verify contract menyebabkan ga keluar abi nya?
+
+//CLOB nya pake dari batch 2, buat orderbook, secara frontend juga ada
