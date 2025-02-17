@@ -19,7 +19,7 @@ contract LendingPoolFactory {
         public
         returns (address)
     {
-        if (lendingPoolCollects[LendingPoolToken1] == LendingPoolToken2) revert lendingPoolHasCreated();
+        // if (lendingPoolCollects[LendingPoolToken1] == LendingPoolToken2) revert lendingPoolHasCreated();
         LendingPool lendingPool = new LendingPool(LendingPoolToken1, LendingPoolToken2, oracle, LTV);
         lendingPoolCollects[LendingPoolToken1] = LendingPoolToken2;
         emit CreateLendingPool(msg.sender, address(lendingPool), LendingPoolToken1, LendingPoolToken2, oracle, LTV);
