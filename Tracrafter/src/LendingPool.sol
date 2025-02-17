@@ -41,6 +41,7 @@ contract LendingPool {
     error PositionNotCreated();
     error InvalidOracle();
     error LTVExceedMaxAmount();
+    error SwitchToCollateralToken();
 
     event CreatePosition(address user, address positionAddress);
     event Supply(address user, uint256 amount, uint256 shares);
@@ -49,7 +50,7 @@ contract LendingPool {
     event WithdrawCollateral(address user, uint256 amount);
     event BorrowByPosition(address user, uint256 amount, uint256 shares);
     event RepayByPosition(address user, uint256 amount, uint256 shares);
-    event RepayWithCollateralByPosition(address user, uint256 shares);
+    event RepayWithCollateralByPosition(address user, uint256 amount, uint256 shares);
     event Flashloan(address user, address token, uint256 amount);
     event SwapByPosition(address user, address tokenIn, address tokenOut, uint256 amountIn, uint256 amountOut);
 
@@ -65,8 +66,8 @@ contract LendingPool {
     mapping(address => uint256) public userCollaterals;
     mapping(address => address) public addressPosition;
 
-    address public collateralToken; // collateral(?)
-    address public borrowToken; // borrow(?)
+    address public collateralToken;
+    address public borrowToken;
     address public router = 0xE592427A0AEce92De3Edee1F18E0157C05861564;
     address public oracle;
 
@@ -99,9 +100,12 @@ contract LendingPool {
         }
     }
 
+    /**
+     * @dev Supply is a function to fill liquidity,
+     * other user borrowing token sources from supply.
+     */
     function supply(uint256 amount) public {
         if (amount == 0) revert ZeroAmount();
-        // Tujuannya adalah untuk penyedia token supaya bisa borrow
         _accrueInterest();
         uint256 shares = 0;
         if (totalSupplyAssets == 0) {
@@ -148,16 +152,13 @@ contract LendingPool {
         uint256 borrowRate = 10;
 
         uint256 interestPerYear = (totalBorrowAssets * borrowRate) / 100;
-        // 1000 * 10 / 100 = 100/year
 
         uint256 elapsedTime = block.timestamp - lastAccrued;
-        // 1 hari
 
         uint256 interest = (interestPerYear * elapsedTime) / 365 days;
-        // interest = $100 * 1 hari / 365 hari  = $0.27
 
         totalSupplyAssets += interest;
-        totalBorrowAssets += interest; // apakah harus nambah
+        totalBorrowAssets += interest;
         lastAccrued = block.timestamp;
     }
 
@@ -186,7 +187,9 @@ contract LendingPool {
     }
 
     function _isHealthy(address user) internal view {
-        // addition isHealthy
+        /**
+         * @dev if user has position, swap token will be including to collateral value,
+         */
         uint256 positionValue = 0;
         if (addressPosition[msg.sender] != address(0)) {
             uint256 positionLength = Position(addressPosition[msg.sender]).getTokenOwnerLength();
@@ -200,14 +203,13 @@ contract LendingPool {
         }
 
         uint256 collateralPrice = IOracle(oracle).getPrice(collateralToken, borrowToken);
-        uint256 collateralDecimals = 10 ** IERC20Metadata(collateralToken).decimals(); // 1e18
+        uint256 collateralDecimals = 10 ** IERC20Metadata(collateralToken).decimals();
 
         uint256 borrowed =
-            userBorrowShares[user] != 0 ? (userBorrowShares[user] * totalBorrowAssets) / totalBorrowShares : 0; // karena sebelumnya jika 0 * 0 / 0 itu tidak bisa, maka harus diprotect kalau userBorrowShares[user] == 0 langsung aja borrow kasih nilai 0
+            userBorrowShares[user] != 0 ? (userBorrowShares[user] * totalBorrowAssets) / totalBorrowShares : 0;
 
-        uint256 collateralValue = (userCollaterals[user] * collateralPrice) / collateralDecimals; // 1e18 * 2633.51578211 /  1e18
-        // uint256 maxBorrow = ((collateralValue) * ltv) / 1e18; // 2633.51578211 * 70%
-        uint256 maxBorrow = ((collateralValue + positionValue) * ltv) / 1e18; // 2633.51578211 * 70%
+        uint256 collateralValue = (userCollaterals[user] * collateralPrice) / collateralDecimals;
+        uint256 maxBorrow = ((collateralValue + positionValue) * ltv) / 1e18;
 
         if (borrowed > maxBorrow) revert InsufficientCollateral();
     }
@@ -239,25 +241,57 @@ contract LendingPool {
         _accrueInterest();
 
         uint256 borrowAmount = ((shares * totalBorrowAssets) / totalBorrowShares);
-        userBorrowShares[msg.sender] -= shares; // 500 - 400
-        totalBorrowShares -= shares; // 500 - 400
-        totalBorrowAssets -= borrowAmount; // 550 - x
+        userBorrowShares[msg.sender] -= shares;
+        totalBorrowShares -= shares;
+        totalBorrowAssets -= borrowAmount;
 
         IERC20(borrowToken).transferFrom(msg.sender, address(this), borrowAmount);
 
         emit RepayByPosition(msg.sender, borrowAmount, shares);
     }
 
+    function repayWithCollateralsByPosition2() public returns (uint256) {
+        uint256 amountOut;
+        uint256 _realPrice;
+        (_realPrice,) = IOracle(oracle).getPriceTrade(borrowToken, collateralToken);
+        amountOut = userCollaterals[msg.sender] * IOracle(oracle).getQuoteDecimal(borrowToken) / _realPrice;
+        TokenSwap(borrowToken).mint(address(this), amountOut);
+        uint256 tokenAmount = getTokenAmountByPosition(0);
+        if (tokenAmount != 0) {
+            return amountOut;
+        } else {
+            return uint256(33333);
+        }
+    }
+
     function repayWithCollateralsByPosition(uint256 shares) public {
         _accrueInterest();
+        uint256 amountOutReal;
+        uint256 _realPrice;
+        // uint256 tokenLength = getTokenLengthByPosition();
 
-        totalBorrowAssets -= shares;
-        totalBorrowShares -= shares;
+        (_realPrice,) = IOracle(oracle).getPriceTrade(borrowToken, collateralToken);
+
+        uint256 amountOut = userCollaterals[msg.sender] * IOracle(oracle).getQuoteDecimal(borrowToken) / _realPrice;
+        userCollaterals[msg.sender] = 0;
+        // mint token usdc, sejumlah usdc, dikirim ke lendingPool
+        amountOutReal += amountOut;
+        TokenSwap(borrowToken).mint(address(this), amountOut);
+        position.costSwapToken(collateralToken, amountOutReal);
+
+        uint256 borrowAmount = ((shares * totalBorrowAssets) / totalBorrowShares);
         userBorrowShares[msg.sender] -= shares;
+        totalBorrowShares -= shares;
+        totalBorrowAssets -= borrowAmount;
 
-        IERC20(borrowToken).transferFrom(msg.sender, address(this), shares);
+        amountOutReal -= borrowAmount;
 
-        emit RepayWithCollateralByPosition(msg.sender, shares);
+        (_realPrice,) = IOracle(oracle).getPriceTrade(collateralToken, borrowToken);
+        amountOutReal = userCollaterals[msg.sender] * IOracle(oracle).getQuoteDecimal(collateralToken) / _realPrice;
+        userCollaterals[msg.sender] += amountOutReal;
+        TokenSwap(collateralToken).mint(address(this), amountOutReal);
+
+        emit RepayWithCollateralByPosition(msg.sender, borrowAmount, shares);
     }
 
     function FlashLoan(address token, uint256 amount, bytes calldata data) external {
@@ -308,6 +342,15 @@ contract LendingPool {
 
         if (_tokenFrom == borrowToken) {
             userCollaterals[msg.sender] -= amountIn;
+        } else {
+            uint256 tokenLength = getTokenLengthByPosition();
+            if (tokenLength != 0) {
+                for (uint256 i = 0; i > tokenLength; i++) {
+                    if (_tokenFrom == getTokenAddressByPosition(i)) {
+                        position.costSwapToken(_tokenFrom, amountIn);
+                    }
+                }
+            }
         }
 
         (uint256 _realPrice,) = IOracle(oracle).getPriceTrade(_tokenTo, _tokenFrom);

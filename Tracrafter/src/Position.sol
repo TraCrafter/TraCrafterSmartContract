@@ -45,6 +45,18 @@ contract Position {
                 }
             }
         }
+        emit SwapToken(msg.sender, _token, _amount);
+    }
+
+    function costSwapToken(address _token, uint256 _amount) public {
+        uint256 tokenOwnerLength = tokenOwner.length;
+
+        for (uint256 i = 0; i < tokenOwnerLength; i++) {
+            if (tokenOwner[i].token == _token) {
+                tokenOwner[i].amount -= _amount;
+                tokenBalance[_token] -= _amount;
+            }
+        }
 
         emit SwapToken(msg.sender, _token, _amount);
     }
@@ -53,9 +65,7 @@ contract Position {
         return tokenOwner.length;
     }
 
-    function getTokenOwnerAddress(
-        uint256 _index
-    ) public view returns (address) {
+    function getTokenOwnerAddress(uint256 _index) public view returns (address) {
         return tokenOwner[_index].token;
     }
 
