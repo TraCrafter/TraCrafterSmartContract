@@ -8,7 +8,7 @@ contract Position {
     error TokenNotFound();
     error InsufficientBalance();
 
-    address public collateral1;
+    address public collateralAssets;
     address public borrowAssets;
     address public owner;
 
@@ -21,8 +21,8 @@ contract Position {
     event Liquidate(address user);
     event SwapToken(address user, address token, uint256 amount);
 
-    constructor(address _collateral1, address _borrow) {
-        collateral1 = _collateral1;
+    constructor(address _collateral, address _borrow) {
+        collateralAssets = _collateral;
         borrowAssets = _borrow;
         owner = msg.sender;
     }

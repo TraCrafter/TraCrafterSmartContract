@@ -6,10 +6,10 @@ import {LendingPoolFactory} from "../src/LendingPoolFactory.sol";
 
 contract LendingPoolFactoryScript is Script {
     LendingPoolFactory public lendingPoolFactory;
-    address public oracle = 0x6E87c01682E547Bf69c73B5F0A1b4aAAE91A1EE1;
+    address public oracle = 0x13B026C3c5589C046F193FFa66427389fa2dbD22;
 
     function setUp() public {
-        vm.createSelectFork(vm.rpcUrl("manta_sepolia"));
+        vm.createSelectFork(vm.rpcUrl("op_sepolia"));
     }
 
     function run() public {

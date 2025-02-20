@@ -8,7 +8,7 @@ contract PriceFeedScript is Script {
     PriceFeed public priceFeed;
 
     function setUp() public {
-        vm.createSelectFork(vm.rpcUrl("manta_sepolia"));
+        vm.createSelectFork(vm.rpcUrl("op_sepolia"));
     }
 
     function run() public {

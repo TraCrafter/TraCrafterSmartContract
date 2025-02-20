@@ -8,15 +8,14 @@ contract PositionScript is Script {
     Position public position;
 
     function setUp() public {
-        string memory rpcUrl = vm.envString("MANTA_SEPOLIA_RPC_URL");
-        vm.createSelectFork(rpcUrl);
+        vm.createSelectFork(vm.rpcUrl("op_sepolia"));
     }
 
     function run() public {
         uint256 privateKey = vm.envUint("DEPLOYER_WALLET_PRIVATE_KEY");
         vm.startBroadcast(privateKey);
         position = new Position(
-            address(0xa7A93C5F0691a5582BAB12C0dE7081C499aECE7f), address(0xA61Eb0D33B5d69DC0D0CE25058785796296b1FBd)
+            address(0x2581acd5925797CFbC1E4D4F7F7C0F84CCcDf874), address(0xeC5B45249298cD0b1c67122f0149E698EF0458BE)
         );
         vm.stopBroadcast();
     }

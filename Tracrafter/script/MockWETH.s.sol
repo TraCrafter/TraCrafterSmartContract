@@ -8,7 +8,7 @@ contract MockWETHScript is Script {
     MockWETH public mockWETH;
 
     function setUp() public {
-        vm.createSelectFork(vm.rpcUrl("manta_sepolia"));
+        vm.createSelectFork(vm.rpcUrl("op_sepolia"));
     }
 
     function run() public {

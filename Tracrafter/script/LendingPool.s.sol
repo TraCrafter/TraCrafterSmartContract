@@ -8,8 +8,7 @@ contract LendingPoolScript is Script {
     LendingPool public lendingPool;
 
     function setUp() public {
-        string memory rpcUrl = vm.envString("MANTA_SEPOLIA_RPC_URL");
-        vm.createSelectFork(rpcUrl);
+        vm.createSelectFork(vm.rpcUrl("op_sepolia"));
     }
 
     function run() public {
