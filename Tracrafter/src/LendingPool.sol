@@ -252,51 +252,6 @@ contract LendingPool {
         emit RepayByPosition(msg.sender, borrowAmount, shares);
     }
 
-    function repayWithCollateralsByPosition(uint256 shares) public {
-        if (shares == 0) revert ZeroAmount();
-        _accrueInterest();
-
-        uint256 _realPrice;
-        uint256 counter = getTokenLengthByPosition();
-
-        for (uint256 i = 0; i < counter; i++) {
-            uint256 x = i + 1;
-            address swapToken = getTokenAddressByPosition(x);
-            if (getTokenBalancesByPosition(swapToken) < 1000) revert SwitchToCollateralToken(); // if there is a little token, still ok
-        }
-        (_realPrice,) = IOracle(oracle).getPriceTrade(borrowToken, collateralToken);
-        uint256 amountOut = userCollaterals[msg.sender] * IOracle(oracle).getQuoteDecimal(borrowToken) / _realPrice;
-        userCollaterals[msg.sender] = 0;
-
-        /**
-         * @dev
-         * mint token usdc, sejumlah usdc, dikirim ke lendingPool
-         * collateralToken convert to borrow Token
-         *
-         */
-        uint256 borrowAmount = ((shares * totalBorrowAssets) / totalBorrowShares);
-
-        IERC20(collateralToken).approve(address(this), borrowAmount);
-        IERC20(collateralToken).transferFrom(address(this), collateralToken, borrowAmount);
-        TokenSwap(borrowToken).mint(address(this), amountOut);
-
-        userBorrowShares[msg.sender] -= shares;
-        totalBorrowShares -= shares;
-        totalBorrowAssets -= borrowAmount;
-        amountOut -= borrowAmount; // USDC - borrowAmount
-
-        /**
-         * @dev
-         * After pay, borrowToken back to collateralToken
-         */
-        uint256 amountOutReal = amountOut;
-        (_realPrice,) = IOracle(oracle).getPriceTrade(collateralToken, borrowToken);
-        amountOut = amountOutReal * IOracle(oracle).getQuoteDecimal(collateralToken) / _realPrice;
-        userCollaterals[msg.sender] += amountOut;
-        TokenSwap(collateralToken).mint(address(this), amountOut);
-        emit RepayWithCollateralByPosition(msg.sender, borrowAmount, shares);
-    }
-
     function repayWithSelectedToken(uint256 shares, address _token) public {
         if (shares == 0) revert ZeroAmount();
         _accrueInterest();
@@ -340,32 +295,6 @@ contract LendingPool {
         IERC20(token).transferFrom(msg.sender, address(this), amount);
 
         emit Flashloan(msg.sender, token, amount);
-    }
-
-    function swapByPosition(address _tokenDestination, uint256 amountIn, uint256 amountOutMin)
-        public
-        positionRequired
-        returns (uint256 amountOut)
-    {
-        if (amountIn == 0) revert ZeroAmount();
-
-        userCollaterals[msg.sender] -= amountIn;
-
-        IERC20(collateralToken).approve(router, amountIn);
-        ISwapRouter.ExactInputSingleParams memory params = ISwapRouter.ExactInputSingleParams({
-            tokenIn: collateralToken,
-            tokenOut: _tokenDestination,
-            fee: 3000,
-            recipient: address(this),
-            deadline: block.timestamp,
-            amountIn: amountIn,
-            amountOutMinimum: amountOutMin,
-            sqrtPriceLimitX96: 0
-        });
-
-        collateralToken = _tokenDestination;
-        amountOut = ISwapRouter(router).exactInputSingle(params);
-        position.swapToken(_tokenDestination, amountOut);
     }
 
     function swapTokenByPosition(address _tokenTo, address _tokenFrom, uint256 amountIn)
