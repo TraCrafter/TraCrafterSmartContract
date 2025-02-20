@@ -37,11 +37,13 @@ contract LendingPool {
     error InsufficientShares();
     error InsufficientLiquidity();
     error InsufficientCollateral();
+    error InsufficientToken();
     error FlashloanFailed();
     error PositionNotCreated();
     error InvalidOracle();
     error LTVExceedMaxAmount();
     error SwitchToCollateralToken();
+    error TokenNotAvailable();
 
     event CreatePosition(address user, address positionAddress);
     event Supply(address user, uint256 amount, uint256 shares);
@@ -198,7 +200,7 @@ contract LendingPool {
 
                 uint256 positionPrice = IOracle(oracle).getPrice(tokenAddress, borrowToken);
                 uint256 positionDecimal = IOracle(oracle).getQuoteDecimal(tokenAddress);
-                positionValue += (position.getTokenBalance(tokenAddress) * positionPrice) / positionDecimal;
+                positionValue += (position.getTokenOwnerBalances(tokenAddress) * positionPrice) / positionDecimal;
             }
         }
 
@@ -250,47 +252,80 @@ contract LendingPool {
         emit RepayByPosition(msg.sender, borrowAmount, shares);
     }
 
-    function repayWithCollateralsByPosition2() public returns (uint256) {
-        uint256 amountOut;
-        uint256 _realPrice;
-        (_realPrice,) = IOracle(oracle).getPriceTrade(borrowToken, collateralToken);
-        amountOut = userCollaterals[msg.sender] * IOracle(oracle).getQuoteDecimal(borrowToken) / _realPrice;
-        TokenSwap(borrowToken).mint(address(this), amountOut);
-        uint256 tokenAmount = getTokenAmountByPosition(0);
-        if (tokenAmount != 0) {
-            return amountOut;
-        } else {
-            return uint256(33333);
-        }
-    }
-
     function repayWithCollateralsByPosition(uint256 shares) public {
+        if (shares == 0) revert ZeroAmount();
         _accrueInterest();
-        uint256 amountOutReal;
+
         uint256 _realPrice;
-        // uint256 tokenLength = getTokenLengthByPosition();
+        uint256 counter = getTokenLengthByPosition();
 
+        for (uint256 i = 0; i < counter; i++) {
+            uint256 x = i + 1;
+            address swapToken = getTokenAddressByPosition(x);
+            if (getTokenBalancesByPosition(swapToken) < 1000) revert SwitchToCollateralToken(); // if there is a little token, still ok
+        }
         (_realPrice,) = IOracle(oracle).getPriceTrade(borrowToken, collateralToken);
-
         uint256 amountOut = userCollaterals[msg.sender] * IOracle(oracle).getQuoteDecimal(borrowToken) / _realPrice;
         userCollaterals[msg.sender] = 0;
-        // mint token usdc, sejumlah usdc, dikirim ke lendingPool
-        amountOutReal += amountOut;
-        TokenSwap(borrowToken).mint(address(this), amountOut);
-        position.costSwapToken(collateralToken, amountOutReal);
 
+        /**
+         * @dev
+         * mint token usdc, sejumlah usdc, dikirim ke lendingPool
+         * collateralToken convert to borrow Token
+         *
+         */
         uint256 borrowAmount = ((shares * totalBorrowAssets) / totalBorrowShares);
+
+        IERC20(collateralToken).approve(address(this), borrowAmount);
+        IERC20(collateralToken).transferFrom(address(this), collateralToken, borrowAmount);
+        TokenSwap(borrowToken).mint(address(this), amountOut);
+
         userBorrowShares[msg.sender] -= shares;
         totalBorrowShares -= shares;
         totalBorrowAssets -= borrowAmount;
+        amountOut -= borrowAmount; // USDC - borrowAmount
 
-        amountOutReal -= borrowAmount;
-
+        /**
+         * @dev
+         * After pay, borrowToken back to collateralToken
+         */
+        uint256 amountOutReal = amountOut;
         (_realPrice,) = IOracle(oracle).getPriceTrade(collateralToken, borrowToken);
-        amountOutReal = userCollaterals[msg.sender] * IOracle(oracle).getQuoteDecimal(collateralToken) / _realPrice;
-        userCollaterals[msg.sender] += amountOutReal;
-        TokenSwap(collateralToken).mint(address(this), amountOutReal);
+        amountOut = amountOutReal * IOracle(oracle).getQuoteDecimal(collateralToken) / _realPrice;
+        userCollaterals[msg.sender] += amountOut;
+        TokenSwap(collateralToken).mint(address(this), amountOut);
+        emit RepayWithCollateralByPosition(msg.sender, borrowAmount, shares);
+    }
 
+    function repayWithSelectedToken(uint256 shares, address _token) public {
+        if (shares == 0) revert ZeroAmount();
+        _accrueInterest();
+        uint256 amountOut;
+
+        uint256 borrowAmount = ((shares * totalBorrowAssets) / totalBorrowShares);
+
+        if (_token == collateralToken) {
+            amountOut = swapTokenByPosition(borrowToken, collateralToken, userCollaterals[msg.sender]);
+        } else if (getTokenCounterByPosition(_token) == 0) {
+            revert TokenNotAvailable();
+        } else {
+            amountOut = swapTokenByPosition(borrowToken, _token, getTokenBalancesByPosition(_token));
+        }
+
+        userBorrowShares[msg.sender] -= shares;
+        totalBorrowShares -= shares;
+        totalBorrowAssets -= borrowAmount;
+        amountOut -= borrowAmount; // USDC - borrowAmount
+
+        /**
+         * @dev
+         * After pay, borrowToken back to collateralToken
+         */
+        if (_token == collateralToken) {
+            swapTokenByPosition(collateralToken, borrowToken, amountOut);
+        } else {
+            swapTokenByPosition(_token, borrowToken, amountOut);
+        }
         emit RepayWithCollateralByPosition(msg.sender, borrowAmount, shares);
     }
 
@@ -339,33 +374,47 @@ contract LendingPool {
         returns (uint256 amountOut)
     {
         if (amountIn == 0) revert ZeroAmount();
+        if (_tokenFrom != collateralToken && getTokenCounterByPosition(_tokenFrom) == 0) revert TokenNotAvailable();
 
-        if (_tokenFrom == borrowToken) {
+        if (_tokenFrom == collateralToken) {
+            IERC20(_tokenFrom).approve(address(this), amountIn);
+            IERC20(_tokenFrom).transferFrom(address(this), _tokenFrom, amountIn);
             userCollaterals[msg.sender] -= amountIn;
         } else {
-            uint256 tokenLength = getTokenLengthByPosition();
-            if (tokenLength != 0) {
-                for (uint256 i = 0; i > tokenLength; i++) {
-                    if (_tokenFrom == getTokenAddressByPosition(i)) {
-                        position.costSwapToken(_tokenFrom, amountIn);
-                    }
-                }
+            uint256 balances = getTokenBalancesByPosition(_tokenFrom);
+            if (balances < amountIn) {
+                revert InsufficientToken();
+            } else {
+                position.costSwapToken(_tokenFrom, amountIn);
             }
         }
 
-        (uint256 _realPrice,) = IOracle(oracle).getPriceTrade(_tokenTo, _tokenFrom);
-        amountOut = amountIn * IOracle(oracle).getQuoteDecimal(_tokenTo) / _realPrice;
+        amountOut = tokenCalculator(amountIn, _tokenFrom, _tokenTo);
 
-        // mint token pepe, sejumlah pepe, dikirim ke
-        TokenSwap(_tokenTo).mint(address(this), amountOut);
+        if (_tokenTo == collateralToken) {
+            TokenSwap(_tokenTo).mint(address(this), amountOut);
+        } else {
+            // mint token pepe, sejumlah pepe, dikirim ke position
+            TokenSwap(_tokenTo).mint(addressPosition[msg.sender], amountOut);
+        }
 
-        if (_tokenTo == borrowToken) {
+        if (_tokenTo == collateralToken) {
             userCollaterals[msg.sender] += amountOut;
         } else {
             position.swapToken(_tokenTo, amountOut);
         }
 
         emit SwapByPosition(msg.sender, collateralToken, _tokenTo, amountIn, amountOut);
+    }
+
+    function tokenCalculator(uint256 _amount, address _tokenFrom, address _tokenTo) public view returns (uint256) {
+        (uint256 _realPrice,) = IOracle(oracle).getPriceTrade(_tokenTo, _tokenFrom);
+        uint256 amountOut = _amount * IOracle(oracle).getQuoteDecimal(_tokenTo) / _realPrice;
+        return amountOut;
+    }
+
+    function getAllTokenOwnerAddress() public view positionRequired returns (address[] memory) {
+        return Position(addressPosition[msg.sender]).getAllTokenOwnerAddress();
     }
 
     function getTokenLengthByPosition() public view positionRequired returns (uint256) {
@@ -376,8 +425,12 @@ contract LendingPool {
         return Position(addressPosition[msg.sender]).getTokenOwnerAddress(_index);
     }
 
-    function getTokenAmountByPosition(uint256 _index) public view positionRequired returns (uint256) {
-        return Position(addressPosition[msg.sender]).getTokenOwnerAmount(_index);
+    function getTokenCounterByPosition(address _token) public view positionRequired returns (uint256) {
+        return Position(addressPosition[msg.sender]).getTokenCounter(_token);
+    }
+
+    function getTokenBalancesByPosition(address _token) public view positionRequired returns (uint256) {
+        return Position(addressPosition[msg.sender]).getTokenOwnerBalances(_token);
     }
 
     function getTokenDecimalByPosition(uint256 _index) public view positionRequired returns (uint256) {
@@ -385,8 +438,5 @@ contract LendingPool {
     }
 }
 
-// custom swap, based on pricefeed
 // bikin pricefeed cronjob
-// waktu create lendingpool bisa, tapi ga verify, apakah karena ga verify contract menyebabkan ga keluar abi nya?
-
 //CLOB nya pake dari batch 2, buat orderbook, secara frontend juga ada

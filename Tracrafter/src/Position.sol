@@ -5,18 +5,18 @@ import {IERC20} from "openzeppelin-contracts/contracts/token/ERC20/ERC20.sol";
 import {LendingPool} from "./LendingPool.sol";
 
 contract Position {
-    struct TokenOwner {
-        address token;
-        uint256 amount;
-    }
+    error TokenNotFound();
+    error InsufficientBalance();
 
     address public collateral1;
     address public borrowAssets;
     address public owner;
 
-    TokenOwner[] public tokenOwner;
+    uint256 public counter;
 
-    mapping(address => uint256) public tokenBalance;
+    mapping(uint256 => address) public tokenLists;
+    mapping(address => uint256) public tokenListsId;
+    mapping(address => uint256) public tokenBalances;
 
     event Liquidate(address user);
     event SwapToken(address user, address token, uint256 amount);
@@ -32,48 +32,46 @@ contract Position {
     }
 
     function swapToken(address _token, uint256 _amount) public {
-        uint256 tokenOwnerLength = tokenOwner.length;
-
-        if (tokenOwnerLength == 0) {
-            tokenOwner.push(TokenOwner(_token, _amount));
-            tokenBalance[_token] = _amount;
-        } else {
-            for (uint256 i = 0; i < tokenOwnerLength; i++) {
-                if (tokenOwner[i].token == _token) {
-                    tokenOwner[i].amount += _amount;
-                    tokenBalance[_token] += _amount;
-                }
-            }
+        if (tokenListsId[_token] == 0) {
+            ++counter;
+            tokenLists[counter] = _token;
+            tokenListsId[_token] = counter;
         }
+        tokenBalances[_token] += _amount;
         emit SwapToken(msg.sender, _token, _amount);
     }
 
     function costSwapToken(address _token, uint256 _amount) public {
-        uint256 tokenOwnerLength = tokenOwner.length;
-
-        for (uint256 i = 0; i < tokenOwnerLength; i++) {
-            if (tokenOwner[i].token == _token) {
-                tokenOwner[i].amount -= _amount;
-                tokenBalance[_token] -= _amount;
-            }
-        }
-
+        if (tokenListsId[_token] == 0) revert TokenNotFound();
+        // if (tokenBalances[_token] > _amount) revert InsufficientBalance();
+        if (tokenBalances[_token] == _amount) tokenBalances[_token] = 0;
+        else tokenBalances[_token] -= _amount;
+        IERC20(_token).approve(address(this), _amount);
+        IERC20(_token).transferFrom(address(this), _token, _amount);
         emit SwapToken(msg.sender, _token, _amount);
     }
 
     function getTokenOwnerLength() public view returns (uint256) {
-        return tokenOwner.length;
+        return counter;
     }
 
-    function getTokenOwnerAddress(uint256 _index) public view returns (address) {
-        return tokenOwner[_index].token;
+    function getTokenOwnerAddress(uint256 _counter) public view returns (address) {
+        return tokenLists[_counter];
     }
 
-    function getTokenOwnerAmount(uint256 _index) public view returns (uint256) {
-        return tokenOwner[_index].amount;
+    function getTokenOwnerBalances(address _token) public view returns (uint256) {
+        return tokenBalances[_token];
     }
 
-    function getTokenBalance(address _token) public view returns (uint256) {
-        return tokenBalance[_token];
+    function getTokenCounter(address _token) public view returns (uint256) {
+        return tokenListsId[_token];
+    }
+
+    function getAllTokenOwnerAddress() public view returns (address[] memory) {
+        address[] memory records = new address[](counter);
+        for (uint256 i = 0; i < counter; i++) {
+            records[i] = tokenLists[i + 1];
+        }
+        return records;
     }
 }

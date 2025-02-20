@@ -17,10 +17,14 @@ contract LendingPoolFactory {
         address lendingPoolAddress;
     }
 
-    address public oracle = 0x6E87c01682E547Bf69c73B5F0A1b4aAAE91A1EE1;
+    address public oracle;
     uint256 public id;
     mapping(uint256 => Pools) public lendingPoolId;
     mapping(address => address) public lendingPoolCollects;
+
+    constructor(address _oracle) {
+        oracle = _oracle;
+    }
 
     function createLendingPool(address LendingPoolToken1, address LendingPoolToken2, uint256 LTV)
         public
@@ -33,5 +37,9 @@ contract LendingPoolFactory {
         lendingPoolCollects[LendingPoolToken1] = LendingPoolToken2;
         emit CreateLendingPool(msg.sender, address(lendingPool), LendingPoolToken1, LendingPoolToken2, oracle, LTV);
         return address(lendingPool);
+    }
+
+    function editOracle(address _oracle) public {
+        oracle = _oracle;
     }
 }

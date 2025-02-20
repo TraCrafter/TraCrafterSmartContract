@@ -64,7 +64,7 @@ contract LendingPoolFactoryTest is Test {
 
         vm.startPrank(alice);
         vm.createSelectFork("https://eth-mainnet.g.alchemy.com/v2/npJ88wr-vv5oxDKlp0mQYSfVXfN2nKif", 21843948);
-        lendingPoolFactory = new LendingPoolFactory();
+        lendingPoolFactory = new LendingPoolFactory(address(oracle));
         lendingPool = new LendingPool(address(weth), address(usdc), address(oracle), 7e17);
         position = new Position(address(weth), address(usdc));
         vm.stopPrank();
@@ -196,36 +196,58 @@ contract LendingPoolFactoryTest is Test {
         console.log("total borrow assets after repay 2", lendingPool.totalBorrowAssets()); // 0
         console.log("total borrow shares after repay 2", lendingPool.totalBorrowShares()); // 0
         console.log("user borrow shares after repay 2", lendingPool.userBorrowShares(bob)); // 0
-        console.log("-----");
-        console.log("-----");
+    }
 
+    function test_part2_repay() public {
+        console.log("----- before borrow");
+        console.log("balance bob usdc", IERC20(address(usdc)).balanceOf(bob));
+        console.log("total borrow shares before", lendingPool.totalBorrowShares()); // 0
+        console.log("total borrow assets before", lendingPool.totalBorrowAssets()); // 0
+        console.log("total supply assets before", lendingPool.totalSupplyAssets()); // 0
+        console.log("user borrow shares before", lendingPool.userBorrowShares(bob)); // 0
+        console.log("-----");
         helper_supply_borrow();
+        console.log("----- after borrow 500 USDC + warp 365 days");
         console.log("balance bob usdc", IERC20(address(usdc)).balanceOf(bob));
         console.log("total borrow shares before", lendingPool.totalBorrowShares()); // 500e6
         console.log("total borrow assets before", lendingPool.totalBorrowAssets()); // 550e6
         console.log("total supply assets before", lendingPool.totalSupplyAssets()); // 1050e6
         console.log("user borrow shares before", lendingPool.userBorrowShares(bob)); // 500e6
+        console.log("-----");
 
         vm.startPrank(bob);
         console.log("-----");
-        console.log("lending pool", IERC20(address(usdc)).balanceOf(address(lendingPool)));
-        // uint256 amountOut2 = lendingPool.swapTokenByPosition(address(pepe), address(weth), 0.1e18);
+        console.log("balance of lending pool weth", IERC20(address(weth)).balanceOf(address(lendingPool)));
+        console.log("-----");
         lendingPool.swapTokenByPosition(address(pepe), address(weth), 0.1e18);
+        console.log("----- weth swap to pepe");
+        console.log("lending pool collaterals", lendingPool.userCollaterals(bob));
+        console.log("balance of lending pool weth", IERC20(address(weth)).balanceOf(address(lendingPool)));
+        console.log("position pepe balance", lendingPool.getTokenBalancesByPosition(address(pepe)));
+        console.log("position pepe IERC20 balance", IERC20(address(pepe)).balanceOf(lendingPool.addressPosition(bob)));
+        console.log("-----");
 
-        console.log("");
+        // lendingPool.swapTokenByPosition(address(weth), address(pepe), 25742815254015769901375706);
+        console.log("----- pepe swap to weth");
+        console.log("lending pool collaterals", lendingPool.userCollaterals(bob));
+        console.log("balance of lending pool weth", IERC20(address(weth)).balanceOf(address(lendingPool)));
+        console.log("position pepe balance", lendingPool.getTokenBalancesByPosition(address(pepe)));
+        console.log("position pepe IERC20 balance", IERC20(address(pepe)).balanceOf(lendingPool.addressPosition(bob)));
+        console.log("-----");
 
-        // console.log("amountOut2", amountOut2); // 51485630508031539802751413
-        // uint256 borrowAmount = ((45e6 * lendingPool.totalBorrowAssets()) / lendinPool.totalBorrowShares());
-        // console.log("borrow amount", borrowAmount);
+        console.log("----- after repay using weth");
+        lendingPool.repayWithSelectedToken(45e6, address(weth)); // 45 shares == 49.5 USDC
+        console.log("lending pool collaterals", lendingPool.userCollaterals(bob));
+        console.log("balance of lending pool weth", IERC20(address(weth)).balanceOf(address(lendingPool)));
+        console.log("position pepe balance", lendingPool.getTokenBalancesByPosition(address(pepe)));
+        console.log("balance of lending pool pepe", IERC20(address(pepe)).balanceOf(lendingPool.addressPosition(bob)));
+        console.log("-----");
 
-        // vm.expectRevert(LendingPool.SwitchToCollateralToken.selector);
-        lendingPool.repayWithCollateralsByPosition(500e6);
-
-        // console.log("position token amount", lendingPool.getTokenAmountByPosition(0));
-        console.log("lending pool 2", IERC20(address(usdc)).balanceOf(address(lendingPool)));
-        // 1550.000000
-        // 6817.031564
-
+        uint256 borrowAmount = ((45e6 * lendingPool.totalBorrowAssets()) / lendingPool.totalBorrowShares());
+        console.log("borrowAmount: ", borrowAmount);
+        console.log("-----");
+        console.log("ETH/USDC", helper_tokenCalculator(1e18, address(weth), address(usdc)));
+        console.log("-----");
         vm.stopPrank();
     }
 
@@ -260,16 +282,33 @@ contract LendingPoolFactoryTest is Test {
         // berkurang udah bisa supply collateral
         console.log("bob balance weth", IERC20(address(weth)).balanceOf(bob)); // 800000000000000000 = 0,8 ether
 
+        /**
+         * @param swapTokenByPosition(toToken, fromToken, amountIn)
+         * 1. WETH is collateral token, can be trade
+         * 2. USDC is not collateral token, can't be trade
+         * 3. USDC can be trade, if collateral token swap to USDC
+         */
         vm.startPrank(bob);
-        // supply 1,2 ether dikurangi 0.5 ether buat swap
-        // uint256 amountOut = lendingPool.swapByPosition(address(pepe), 0.2e18, 0);
-        // console.log("amountOut", amountOut); // 52596299907590306486703283
         uint256 amountOut2 = lendingPool.swapTokenByPosition(address(pepe), address(weth), 0.1e18);
         console.log("amountOut2", amountOut2); // 51485630508031539802751413
+
+        vm.expectRevert(LendingPool.TokenNotAvailable.selector);
         uint256 amountOut3 = lendingPool.swapTokenByPosition(address(pepe), address(usdc), 526703156);
         console.log("amountOut3", amountOut3); // 52670315.600000000000000000
         vm.stopPrank();
+    }
 
+    function helper_tokenCalculator(uint256 _amount, address _tokenFrom, address _tokenTo)
+        public
+        view
+        returns (uint256)
+    {
+        (uint256 _realPrice,) = IOracle(oracle).getPriceTrade(_tokenTo, _tokenFrom);
+        uint256 amountOut = _amount * IOracle(oracle).getQuoteDecimal(_tokenTo) / _realPrice;
+        return amountOut;
+    }
+
+    function helper_swap() public view {
         console.log("Bob's Collateral", lendingPool.userCollaterals(bob)); // 1 ether
 
         (uint256 pepePrice,) = IOracle(oracle).getPriceTrade(address(pepe), address(usdc));
@@ -303,14 +342,12 @@ contract LendingPoolFactoryTest is Test {
         ); // 257380254
         console.log("1 eth dapat wbtc sejumlah:", 2633515782 * 1e8 / wbtcPrice); // 0.02712531
         console.log("-----");
-        uint256 totalPepe = priceFeed.priceCollateral(address(pepe)) * amountOut3 / 1e18;
-        console.log("Price of PEPE/USD", totalPepe); // 262.32009831
-        uint256 totalWETH = priceFeed.priceCollateral(address(weth)) * lendingPool.userCollaterals(bob) / 1e18;
-        console.log("Price of WETH/USD", totalWETH); // 3133.57000000
+        // uint256 totalPepe = priceFeed.priceCollateral(address(pepe)) * amountOut3 / 1e18;
+        // console.log("Price of PEPE/USD", totalPepe); // 262.32009831
+        // uint256 totalWETH = priceFeed.priceCollateral(address(weth)) * lendingPool.userCollaterals(bob) / 1e18;
+        // console.log("Price of WETH/USD", totalWETH); // 3133.57000000
         console.log("-----");
         console.log("-----");
         console.log("-----");
     }
-
-    function test_editPriceFeed() public {}
 }
