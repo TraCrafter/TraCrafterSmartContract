@@ -3,6 +3,8 @@ pragma solidity ^0.8.13;
 
 import {IERC20} from "openzeppelin-contracts/contracts/token/ERC20/ERC20.sol";
 import {IERC20Metadata} from "openzeppelin-contracts/contracts/token/ERC20/extensions/IERC20Metadata.sol";
+import {SafeERC20} from "openzeppelin-contracts/contracts/token/ERC20/utils/SafeERC20.sol";
+import {ReentrancyGuard} from "openzeppelin-contracts/contracts/utils/ReentrancyGuard.sol";
 import {Position} from "./Position.sol";
 
 interface ISwapRouter {
@@ -31,7 +33,9 @@ interface TokenSwap {
     function mint(address _to, uint256 _amount) external;
 }
 
-contract LendingPool {
+contract LendingPool is ReentrancyGuard {
+    using SafeERC20 for IERC20; // fungsi dari IERC20 akan ketambahan SafeERC20
+
     error ZeroAmount();
     error PositionUnavailable();
     error InsufficientShares();
@@ -88,6 +92,7 @@ contract LendingPool {
         collateralToken = _collateralToken;
         borrowToken = _borrowToken;
         lastAccrued = block.timestamp;
+
         if (_oracle == address(0)) revert InvalidOracle();
         oracle = _oracle;
 
@@ -106,7 +111,7 @@ contract LendingPool {
      * @dev Supply is a function to fill liquidity,
      * other user borrowing token sources from supply.
      */
-    function supply(uint256 amount) public {
+    function supply(uint256 amount) public nonReentrant {
         if (amount == 0) revert ZeroAmount();
         _accrueInterest();
         uint256 shares = 0;
@@ -119,13 +124,13 @@ contract LendingPool {
         userSupplyShares[msg.sender] += shares;
         totalSupplyShares += shares;
         totalSupplyAssets += amount;
-
-        IERC20(borrowToken).transferFrom(msg.sender, address(this), amount);
+        
+        IERC20(borrowToken).safeTransferFrom(msg.sender, address(this), amount);
 
         emit Supply(msg.sender, amount, shares);
     }
 
-    function withdraw(uint256 shares) external {
+    function withdraw(uint256 shares) external nonReentrant {
         if (shares == 0) revert ZeroAmount();
         if (shares > userSupplyShares[msg.sender]) revert InsufficientShares();
 
@@ -141,7 +146,7 @@ contract LendingPool {
             revert InsufficientLiquidity();
         }
 
-        IERC20(borrowToken).transfer(msg.sender, amount);
+        IERC20(borrowToken).safeTransfer(msg.sender, amount);
 
         emit Withdraw(msg.sender, amount, shares);
     }
@@ -164,16 +169,16 @@ contract LendingPool {
         lastAccrued = block.timestamp;
     }
 
-    function supplyCollateralByPosition(uint256 amount) public positionRequired {
+    function supplyCollateralByPosition(uint256 amount) public positionRequired nonReentrant {
         if (amount == 0) revert ZeroAmount();
         accrueInterest();
         userCollaterals[msg.sender] += amount;
-        IERC20(collateralToken).transferFrom(msg.sender, address(this), amount);
+        IERC20(collateralToken).safeTransferFrom(msg.sender, address(this), amount);
 
         emit SupplyCollateralByPosition(msg.sender, amount);
     }
 
-    function withdrawCollateral(uint256 amount) public {
+    function withdrawCollateral(uint256 amount) public nonReentrant {
         if (amount == 0) revert ZeroAmount();
         if (amount > userCollaterals[msg.sender]) revert InsufficientCollateral();
 
@@ -183,7 +188,7 @@ contract LendingPool {
 
         _isHealthy(msg.sender);
 
-        IERC20(collateralToken).transfer(msg.sender, amount);
+        IERC20(collateralToken).safeTransfer(msg.sender, amount);
 
         emit WithdrawCollateral(msg.sender, amount);
     }
@@ -216,7 +221,7 @@ contract LendingPool {
         if (borrowed > maxBorrow) revert InsufficientCollateral();
     }
 
-    function borrowByPosition(uint256 amount) public positionRequired {
+    function borrowByPosition(uint256 amount) public positionRequired nonReentrant {
         _accrueInterest();
         uint256 shares = 0;
         if (totalBorrowShares == 0) {
@@ -232,12 +237,12 @@ contract LendingPool {
         if (totalBorrowAssets > totalSupplyAssets) {
             revert InsufficientLiquidity();
         }
-        IERC20(borrowToken).transfer(msg.sender, amount);
+        IERC20(borrowToken).safeTransfer(msg.sender, amount);
 
         emit BorrowByPosition(msg.sender, amount, shares);
     }
 
-    function repayByPosition(uint256 shares) public positionRequired {
+    function repayByPosition(uint256 shares) public positionRequired nonReentrant {
         if (shares == 0) revert ZeroAmount();
 
         _accrueInterest();
@@ -247,12 +252,12 @@ contract LendingPool {
         totalBorrowShares -= shares;
         totalBorrowAssets -= borrowAmount;
 
-        IERC20(borrowToken).transferFrom(msg.sender, address(this), borrowAmount);
+        IERC20(borrowToken).safeTransferFrom(msg.sender, address(this), borrowAmount);
 
         emit RepayByPosition(msg.sender, borrowAmount, shares);
     }
 
-    function repayWithSelectedToken(uint256 shares, address _token) public {
+    function repayWithSelectedToken(uint256 shares, address _token) public nonReentrant {
         if (shares == 0) revert ZeroAmount();
         _accrueInterest();
         uint256 amountOut;
@@ -287,12 +292,12 @@ contract LendingPool {
     function FlashLoan(address token, uint256 amount, bytes calldata data) external {
         if (amount == 0) revert ZeroAmount();
 
-        IERC20(token).transfer(msg.sender, amount);
+        IERC20(token).safeTransfer(msg.sender, amount);
 
         (bool success,) = address(msg.sender).call(data);
         if (!success) revert FlashloanFailed();
 
-        IERC20(token).transferFrom(msg.sender, address(this), amount);
+        IERC20(token).safeTransferFrom(msg.sender, address(this), amount);
 
         emit Flashloan(msg.sender, token, amount);
     }
@@ -307,7 +312,7 @@ contract LendingPool {
 
         if (_tokenFrom == collateralToken) {
             IERC20(_tokenFrom).approve(address(this), amountIn);
-            IERC20(_tokenFrom).transferFrom(address(this), _tokenFrom, amountIn);
+            IERC20(_tokenFrom).safeTransferFrom(address(this), _tokenFrom, amountIn);
             userCollaterals[msg.sender] -= amountIn;
         } else {
             uint256 balances = getTokenBalancesByPosition(_tokenFrom);
