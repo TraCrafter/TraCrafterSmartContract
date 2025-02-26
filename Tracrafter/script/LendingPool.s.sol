@@ -8,16 +8,16 @@ contract LendingPoolScript is Script {
     LendingPool public lendingPool;
 
     function setUp() public {
-        vm.createSelectFork(vm.rpcUrl("op_sepolia"));
+        vm.createSelectFork(vm.rpcUrl("rise_sepolia"));
     }
 
     function run() public {
         uint256 privateKey = vm.envUint("DEPLOYER_WALLET_PRIVATE_KEY");
         vm.startBroadcast(privateKey);
         lendingPool = new LendingPool(
-            address(0x2581acd5925797CFbC1E4D4F7F7C0F84CCcDf874),
-            address(0xeC5B45249298cD0b1c67122f0149E698EF0458BE),
-            address(0x13B026C3c5589C046F193FFa66427389fa2dbD22),
+            address(0x3A6c69259bC97E0912C7a678ca5331A93d2bfA46),
+            address(0x373e1981F97607B4073Ee8bB23e3810CdAAAD1f8),
+            address(0xB4B02595698b7f5dce44ad3a7F300454932835DE),
             700000000000000000
         );
         vm.stopBroadcast();

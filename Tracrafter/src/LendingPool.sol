@@ -33,6 +33,17 @@ interface TokenSwap {
     function mint(address _to, uint256 _amount) external;
 }
 
+interface IPosition {
+    function getTokenOwnerLength() external view returns (uint256);
+    function getTokenOwnerBalances(address _token) external view returns (uint256);
+    function getTokenCounter(address _token) external view returns (uint256);
+    function getTokenOwnerAddress(uint256 _counter) external view returns (address);
+    function getAllTokenOwnerAddress() external view returns (address[] memory);
+    function counter() external view returns (uint256);
+    function swapToken(address _token, uint256 _amount) external;
+    function costSwapToken(address _token, uint256 _amount) external;
+}
+
 contract LendingPool is ReentrancyGuard {
     using SafeERC20 for IERC20; // fungsi dari IERC20 akan ketambahan SafeERC20
 
@@ -124,7 +135,7 @@ contract LendingPool is ReentrancyGuard {
         userSupplyShares[msg.sender] += shares;
         totalSupplyShares += shares;
         totalSupplyAssets += amount;
-        
+
         IERC20(borrowToken).safeTransferFrom(msg.sender, address(this), amount);
 
         emit Supply(msg.sender, amount, shares);
@@ -199,13 +210,15 @@ contract LendingPool is ReentrancyGuard {
          */
         uint256 positionValue = 0;
         if (addressPosition[msg.sender] != address(0)) {
-            uint256 positionLength = Position(addressPosition[msg.sender]).getTokenOwnerLength();
+            uint256 positionLength = IPosition(addressPosition[msg.sender]).getTokenOwnerLength();
             for (uint256 i = 0; i < positionLength; i++) {
-                address tokenAddress = Position(addressPosition[msg.sender]).getTokenOwnerAddress(i);
+                address tokenAddress = IPosition(addressPosition[msg.sender]).getTokenOwnerAddress(i);
 
                 uint256 positionPrice = IOracle(oracle).getPrice(tokenAddress, borrowToken);
                 uint256 positionDecimal = IOracle(oracle).getQuoteDecimal(tokenAddress);
-                positionValue += (position.getTokenOwnerBalances(tokenAddress) * positionPrice) / positionDecimal;
+                positionValue += (
+                    IPosition(addressPosition[msg.sender]).getTokenOwnerBalances(tokenAddress) * positionPrice
+                ) / positionDecimal;
             }
         }
 
@@ -319,7 +332,7 @@ contract LendingPool is ReentrancyGuard {
             if (balances < amountIn) {
                 revert InsufficientToken();
             } else {
-                position.costSwapToken(_tokenFrom, amountIn);
+                IPosition(addressPosition[msg.sender]).costSwapToken(_tokenFrom, amountIn);
             }
         }
 
@@ -335,7 +348,7 @@ contract LendingPool is ReentrancyGuard {
         if (_tokenTo == collateralToken) {
             userCollaterals[msg.sender] += amountOut;
         } else {
-            position.swapToken(_tokenTo, amountOut);
+            IPosition(addressPosition[msg.sender]).swapToken(_tokenTo, amountOut);
         }
 
         emit SwapByPosition(msg.sender, collateralToken, _tokenTo, amountIn, amountOut);
@@ -348,29 +361,26 @@ contract LendingPool is ReentrancyGuard {
     }
 
     function getAllTokenOwnerAddress() public view positionRequired returns (address[] memory) {
-        return Position(addressPosition[msg.sender]).getAllTokenOwnerAddress();
+        return IPosition(addressPosition[msg.sender]).getAllTokenOwnerAddress();
     }
 
     function getTokenLengthByPosition() public view positionRequired returns (uint256) {
-        return Position(addressPosition[msg.sender]).getTokenOwnerLength();
+        return IPosition(addressPosition[msg.sender]).getTokenOwnerLength();
     }
 
     function getTokenAddressByPosition(uint256 _index) public view positionRequired returns (address) {
-        return Position(addressPosition[msg.sender]).getTokenOwnerAddress(_index);
+        return IPosition(addressPosition[msg.sender]).getTokenOwnerAddress(_index);
     }
 
     function getTokenCounterByPosition(address _token) public view positionRequired returns (uint256) {
-        return Position(addressPosition[msg.sender]).getTokenCounter(_token);
+        return IPosition(addressPosition[msg.sender]).getTokenCounter(_token);
     }
 
     function getTokenBalancesByPosition(address _token) public view positionRequired returns (uint256) {
-        return Position(addressPosition[msg.sender]).getTokenOwnerBalances(_token);
+        return IPosition(addressPosition[msg.sender]).getTokenOwnerBalances(_token);
     }
 
     function getTokenDecimalByPosition(uint256 _index) public view positionRequired returns (uint256) {
         return IERC20Metadata(Position(addressPosition[msg.sender]).getTokenOwnerAddress(_index)).decimals();
     }
 }
-
-// bikin pricefeed cronjob
-//CLOB nya pake dari batch 2, buat orderbook, secara frontend juga ada

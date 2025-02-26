@@ -291,6 +291,7 @@ contract LendingPoolFactoryTest is Test {
         vm.startPrank(bob);
         uint256 amountOut2 = lendingPool.swapTokenByPosition(address(pepe), address(weth), 0.1e18);
         console.log("amountOut2", amountOut2); // 51485630508031539802751413
+        console.log("-------dapet berapa pepe=====",lendingPool.getTokenBalancesByPosition(address(pepe)));
 
         vm.expectRevert(LendingPool.TokenNotAvailable.selector);
         uint256 amountOut3 = lendingPool.swapTokenByPosition(address(pepe), address(usdc), 526703156);
