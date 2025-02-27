@@ -282,10 +282,8 @@ contract LendingPool is ReentrancyGuard {
             // usdc += position
         } else if (getTokenCounterByPosition(_token) == 0) {
             revert TokenNotAvailable();
-        } else if (_token == borrowToken) {
-            IPosition(addressPosition[msg.sender]).costSwapToken(_token, borrowAmount);
         } else {
-            amountOut = swapTokenByPosition(borrowToken, _token, getTokenBalancesByPosition(_token));
+            IPosition(addressPosition[msg.sender]).costSwapToken(_token, borrowAmount);
         }
 
         userBorrowShares[msg.sender] -= shares;

@@ -15,9 +15,9 @@ contract LendingPoolScript is Script {
         uint256 privateKey = vm.envUint("DEPLOYER_WALLET_PRIVATE_KEY");
         vm.startBroadcast(privateKey);
         lendingPool = new LendingPool(
-            address(0x3A6c69259bC97E0912C7a678ca5331A93d2bfA46),
-            address(0x373e1981F97607B4073Ee8bB23e3810CdAAAD1f8),
-            address(0xB4B02595698b7f5dce44ad3a7F300454932835DE),
+            0xF47E3c53CE1259fEF635Ca319bd929Fd22Da1972, // collateral
+            0x58E50D45A7Bec0aa0079b67B756FEE3CD8b21D3C, // borrow
+            0xB4B02595698b7f5dce44ad3a7F300454932835DE,
             700000000000000000
         );
         vm.stopBroadcast();

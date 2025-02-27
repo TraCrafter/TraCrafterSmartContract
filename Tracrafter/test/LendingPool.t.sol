@@ -277,11 +277,13 @@ contract LendingPoolFactoryTest is Test {
         console.log("----- repay with weth");
         console.log("lending pool collaterals", lendingPool.userCollaterals(bob));
         console.log("position usdc balance", lendingPool.getTokenBalancesByPosition(address(usdc))); // 39552.236731 harusnya berkurang
+        console.log("total borrow shares", lendingPool.totalBorrowShares());
         console.log("-----");
 
         lendingPool.repayWithSelectedToken(45e6, address(usdc));
         console.log("----- repay with usdc");
         console.log("position usdc balance", lendingPool.getTokenBalancesByPosition(address(usdc))); // 39552.236731 harusnya berkurang
+        console.log("total borrow shares", lendingPool.totalBorrowShares());
         console.log("-----");
         vm.stopPrank();
     }
