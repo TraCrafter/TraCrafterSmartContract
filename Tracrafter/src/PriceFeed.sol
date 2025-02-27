@@ -70,7 +70,7 @@ contract PriceFeed {
         subOwner[msg.sender] = true;
     }
 
-    function addPriceFeed(string memory _name, address _token, address _priceAddress) public onlyOwner {
+    function addPriceFeed(string memory _name, address _token, address _priceAddress) public {
         priceLists.push(PriceLists(_name, _priceAddress));
         quoteFeed[_token] = _priceAddress;
         baseFeed[_token] = _priceAddress;
@@ -78,7 +78,7 @@ contract PriceFeed {
         emit AddPriceFeed(_name, _token, _priceAddress);
     }
 
-    function editPriceFeed(string memory _name, address _priceAddress, uint256 _index) public onlyOwner {
+    function editPriceFeed(string memory _name, address _priceAddress, uint256 _index) public {
         priceLists[_index] = PriceLists(_name, _priceAddress);
 
         emit EditPriceFeed(_name, _priceAddress, _index);
@@ -96,8 +96,7 @@ contract PriceFeed {
         emit AddPairPriceBorrow(_borrow, _priceAddress);
     }
 
-    function addPriceManual(string memory _name, address _tokenAddres, uint256 _price, uint256 _decimal)public onlyOwner
-    {
+    function addPriceManual(string memory _name, address _tokenAddres, uint256 _price, uint256 _decimal) public {
         if (tokenPrices[_tokenAddres].startedAt != 0) {
             tokenPrices[_tokenAddres] = PriceManual({
                 name: tokenPrices[_tokenAddres].name,
@@ -148,7 +147,6 @@ contract PriceFeed {
 
         if (quotePrice == 0) revert QuotePriceZero();
         if (basePrice == 0) revert BasePriceZero();
-
 
         return (((quotePrice * decimal) / basePrice), decimal);
     }
