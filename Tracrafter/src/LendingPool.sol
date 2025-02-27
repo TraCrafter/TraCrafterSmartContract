@@ -213,12 +213,13 @@ contract LendingPool is ReentrancyGuard {
             uint256 positionLength = IPosition(addressPosition[msg.sender]).getTokenOwnerLength();
             for (uint256 i = 0; i < positionLength; i++) {
                 address tokenAddress = IPosition(addressPosition[msg.sender]).getTokenOwnerAddress(i);
-
-                uint256 positionPrice = IOracle(oracle).getPrice(tokenAddress, borrowToken);
-                uint256 positionDecimal = IOracle(oracle).getQuoteDecimal(tokenAddress);
-                positionValue += (
-                    IPosition(addressPosition[msg.sender]).getTokenOwnerBalances(tokenAddress) * positionPrice
-                ) / positionDecimal;
+                if (tokenAddress != address(0)) {
+                    uint256 positionPrice = IOracle(oracle).getPrice(tokenAddress, borrowToken);
+                    uint256 positionDecimal = IOracle(oracle).getQuoteDecimal(tokenAddress);
+                    positionValue += (
+                        IPosition(addressPosition[msg.sender]).getTokenOwnerBalances(tokenAddress) * positionPrice
+                    ) / positionDecimal;
+                }
             }
         }
 
@@ -277,33 +278,30 @@ contract LendingPool is ReentrancyGuard {
         uint256 borrowAmount = ((shares * totalBorrowAssets) / totalBorrowShares);
         //_token = weth
         if (_token == collateralToken) {
-            // weth to usdc, with all amount user have
-            amountOut = swapTokenByPosition(borrowToken, collateralToken, userCollaterals[msg.sender]);
-            // usdc += position
+            amountOut = tokenCalculator(userCollaterals[msg.sender], collateralToken, borrowToken);
+            userCollaterals[msg.sender] = 0;
         } else if (getTokenCounterByPosition(_token) == 0) {
             revert TokenNotAvailable();
         } else {
-            IPosition(addressPosition[msg.sender]).costSwapToken(_token, borrowAmount);
+            amountOut = tokenCalculator(getTokenBalancesByPosition(_token), _token, borrowToken);
         }
 
         userBorrowShares[msg.sender] -= shares;
         totalBorrowShares -= shares;
         totalBorrowAssets -= borrowAmount;
-        if (_token != borrowToken) {
-            amountOut -= borrowAmount; // USDC - borrowAmount
-        }
+        amountOut -= borrowAmount; // _token - borrowAmount
+        // }
 
         /**
          * @dev
          * After pay, borrowToken back to collateralToken
          */
         if (_token == collateralToken) {
-            // all usdc back to weth
-            swapTokenByPosition(collateralToken, borrowToken, amountOut);
-        } else if (_token == borrowToken) {
-            amountOut;
+            amountOut = tokenCalculator(amountOut, borrowToken, collateralToken);
+            userCollaterals[msg.sender] += amountOut;
         } else {
-            swapTokenByPosition(_token, borrowToken, amountOut);
+            amountOut = tokenCalculator(amountOut, borrowToken, _token);
+            IPosition(addressPosition[msg.sender]).costSwapToken(_token, borrowAmount);
         }
         emit RepayWithCollateralByPosition(msg.sender, borrowAmount, shares);
     }

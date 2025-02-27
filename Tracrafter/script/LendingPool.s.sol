@@ -14,12 +14,12 @@ contract LendingPoolScript is Script {
     function run() public {
         uint256 privateKey = vm.envUint("DEPLOYER_WALLET_PRIVATE_KEY");
         vm.startBroadcast(privateKey);
-        lendingPool = new LendingPool(
-            0xF47E3c53CE1259fEF635Ca319bd929Fd22Da1972, // collateral
-            0x58E50D45A7Bec0aa0079b67B756FEE3CD8b21D3C, // borrow
-            0xB4B02595698b7f5dce44ad3a7F300454932835DE,
-            700000000000000000
-        );
+
+        address collateral = 0x5Eef02790e6722CC1B1C03595C28f9Fa63f9846d;
+        address borrow = 0x2C659014c834A27731b0Ed53cA43f3Fd64B2aea3;
+        address oracle = 0x174a6aa5f27F062C63D920693FEB1511D449ba4B;
+        
+        lendingPool = new LendingPool(collateral, borrow, oracle, 700000000000000000);
         vm.stopBroadcast();
     }
 }

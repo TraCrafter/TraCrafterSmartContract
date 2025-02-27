@@ -285,6 +285,7 @@ contract LendingPoolFactoryTest is Test {
         console.log("position usdc balance", lendingPool.getTokenBalancesByPosition(address(usdc))); // 39552.236731 harusnya berkurang
         console.log("total borrow shares", lendingPool.totalBorrowShares());
         console.log("-----");
+        console.log("calculator", lendingPool.tokenCalculator(1e18, address(weth), address(usdc)));
         vm.stopPrank();
     }
 
@@ -333,6 +334,77 @@ contract LendingPoolFactoryTest is Test {
         vm.expectRevert(LendingPool.TokenNotAvailable.selector);
         uint256 amountOut3 = lendingPool.swapTokenByPosition(address(pepe), address(usdc), 526703156);
         console.log("amountOut3", amountOut3); // 52670315.600000000000000000
+        vm.stopPrank();
+    }
+
+    function test_web_flow() public {
+        vm.startPrank(bob);
+
+        IERC20(address(usdc)).approve(address(lendingPool), 1000e6);
+        lendingPool.supply(1000e6);
+
+        console.log("----------------------------------------------------------------");
+        console.log("Bob supply Shares", lendingPool.totalSupplyShares());
+        console.log("Bob supply Assets", lendingPool.totalSupplyAssets());
+        console.log("----------------------------------------------------------------");
+
+        lendingPool.createPosition();
+        IERC20(address(weth)).approve(address(lendingPool), 5e18);
+        lendingPool.supplyCollateralByPosition(5e18);
+
+        console.log("----------------------------------------------------------------");
+        console.log("Bob supply Assets", lendingPool.userCollaterals(bob));
+        console.log("----------------------------------------------------------------");
+
+        lendingPool.borrowByPosition(500e6);
+        console.log("----------------------------------------------------------------");
+        console.log("Bob borrow shares", lendingPool.userBorrowShares(bob));
+        console.log("Bob borrow assets", lendingPool.totalBorrowAssets());
+        console.log("----------------------------------------------------------------");
+
+        vm.warp(block.timestamp + 365 days);
+        lendingPool.accrueInterest();
+
+        lendingPool.swapTokenByPosition(address(usdc), address(weth), 1e18);
+
+        console.log("----------------------------------------------------------------");
+        console.log("Bob usdc", lendingPool.getTokenBalancesByPosition(address(usdc)));
+        console.log("Bob weth", lendingPool.userCollaterals(bob));
+        console.log("Bob borrow shares", lendingPool.userBorrowShares(bob));
+        console.log("Bob borrow assets", lendingPool.totalBorrowAssets());
+        console.log("----------------------------------------------------------------");
+
+        lendingPool.repayWithSelectedToken(100e6, address(usdc));
+
+        console.log("----------------------------------------------------------------");
+        console.log("Bob usdc", lendingPool.getTokenBalancesByPosition(address(usdc)));
+        console.log("Bob weth", lendingPool.userCollaterals(bob));
+        console.log("Bob borrow shares", lendingPool.userBorrowShares(bob));
+        console.log("Bob borrow assets", lendingPool.totalBorrowAssets());
+
+        console.log("collateral", lendingPool.collateralToken());
+        console.log("borrow", lendingPool.borrowToken());
+        console.log("tokenownerlength", lendingPool.getTokenLengthByPosition());
+        console.log("----------------------------------------------------------------");
+        vm.warp(block.timestamp + 365 days);
+
+        lendingPool.borrowByPosition(100e6);
+
+        // console.log("Bob usdc", lendingPool.getTokenBalancesByPosition(address(usdc)));
+        // console.log("Bob weth", lendingPool.userCollaterals(bob));
+        // console.log("Bob borrow shares", lendingPool.userBorrowShares(bob));
+        // console.log("Bob borrow assets", lendingPool.totalBorrowAssets());
+        vm.warp(block.timestamp + 365 days);
+        uint256 borrowAmount = ((100e6 * lendingPool.totalBorrowAssets()) / lendingPool.totalBorrowShares());
+
+        console.log("borrowAmount", borrowAmount);
+
+        lendingPool.repayWithSelectedToken(100e6, address(usdc));
+        console.log("----------------------------------------------------------------");
+        console.log("Bob usdc", lendingPool.getTokenBalancesByPosition(address(usdc)));
+        console.log("----------------------------------------------------------------");
+        // lendingPool.borrowByPosition(100e6);
+
         vm.stopPrank();
     }
 

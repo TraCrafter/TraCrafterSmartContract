@@ -44,10 +44,11 @@ contract Position {
     function costSwapToken(address _token, uint256 _amount) public {
         if (tokenListsId[_token] == 0) revert TokenNotFound();
         // if (tokenBalances[_token] > _amount) revert InsufficientBalance();
-        if (tokenBalances[_token] == _amount) tokenBalances[_token] = 0;
-        else tokenBalances[_token] -= _amount;
-        IERC20(_token).approve(address(this), _amount);
-        IERC20(_token).transferFrom(address(this), _token, _amount);
+        // if (tokenBalances[_token] == _amount) tokenBalances[_token] = 0;
+        // else 
+        tokenBalances[_token] -= _amount;
+        // IERC20(_token).approve(address(this), _amount);
+        // IERC20(_token).transferFrom(address(this), _token, _amount);
         emit SwapToken(msg.sender, _token, _amount);
     }
 

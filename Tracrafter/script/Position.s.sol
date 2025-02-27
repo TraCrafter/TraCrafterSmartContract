@@ -13,10 +13,11 @@ contract PositionScript is Script {
 
     function run() public {
         uint256 privateKey = vm.envUint("DEPLOYER_WALLET_PRIVATE_KEY");
+
+        address collateral = 0x5Eef02790e6722CC1B1C03595C28f9Fa63f9846d;
+        address borrow = 0x2C659014c834A27731b0Ed53cA43f3Fd64B2aea3;
         vm.startBroadcast(privateKey);
-        position = new Position(
-            address(0x2581acd5925797CFbC1E4D4F7F7C0F84CCcDf874), address(0xeC5B45249298cD0b1c67122f0149E698EF0458BE)
-        );
+        position = new Position(collateral, borrow);
         vm.stopBroadcast();
     }
 }

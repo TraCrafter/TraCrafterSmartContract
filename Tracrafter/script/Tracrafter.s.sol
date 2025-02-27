@@ -28,6 +28,7 @@ contract TracrafterScript is Script {
 
     function setUp() public {
         vm.createSelectFork(vm.rpcUrl("rise_sepolia"));
+        // vm.createSelectFork(vm.rpcUrl("op_sepolia"));
     }
 
     function run() public {
