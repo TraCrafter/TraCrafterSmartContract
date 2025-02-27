@@ -1,1 +1,0 @@
-- bikin function convert amount to shares 
