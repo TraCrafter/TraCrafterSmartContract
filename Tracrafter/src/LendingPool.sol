@@ -274,13 +274,16 @@ contract LendingPool is ReentrancyGuard {
         if (shares == 0) revert ZeroAmount();
         _accrueInterest();
         uint256 amountOut;
-
         uint256 borrowAmount = ((shares * totalBorrowAssets) / totalBorrowShares);
-
+        //_token = weth
         if (_token == collateralToken) {
+            // weth to usdc, with all amount user have
             amountOut = swapTokenByPosition(borrowToken, collateralToken, userCollaterals[msg.sender]);
+            // usdc += position
         } else if (getTokenCounterByPosition(_token) == 0) {
             revert TokenNotAvailable();
+        } else if (_token == borrowToken) {
+            IPosition(addressPosition[msg.sender]).costSwapToken(_token, borrowAmount);
         } else {
             amountOut = swapTokenByPosition(borrowToken, _token, getTokenBalancesByPosition(_token));
         }
@@ -288,14 +291,19 @@ contract LendingPool is ReentrancyGuard {
         userBorrowShares[msg.sender] -= shares;
         totalBorrowShares -= shares;
         totalBorrowAssets -= borrowAmount;
-        amountOut -= borrowAmount; // USDC - borrowAmount
+        if (_token != borrowToken) {
+            amountOut -= borrowAmount; // USDC - borrowAmount
+        }
 
         /**
          * @dev
          * After pay, borrowToken back to collateralToken
          */
         if (_token == collateralToken) {
+            // all usdc back to weth
             swapTokenByPosition(collateralToken, borrowToken, amountOut);
+        } else if (_token == borrowToken) {
+            amountOut;
         } else {
             swapTokenByPosition(_token, borrowToken, amountOut);
         }
@@ -331,6 +339,8 @@ contract LendingPool is ReentrancyGuard {
             uint256 balances = getTokenBalancesByPosition(_tokenFrom);
             if (balances < amountIn) {
                 revert InsufficientToken();
+            } else if (_tokenFrom == borrowToken) {
+                amountOut = tokenCalculator(amountIn, _tokenFrom, _tokenTo);
             } else {
                 IPosition(addressPosition[msg.sender]).costSwapToken(_tokenFrom, amountIn);
             }
@@ -339,9 +349,10 @@ contract LendingPool is ReentrancyGuard {
         amountOut = tokenCalculator(amountIn, _tokenFrom, _tokenTo);
 
         if (_tokenTo == collateralToken) {
+            // mint token usdc, sejumlah usdc, dikirim ke lendingPool
             TokenSwap(_tokenTo).mint(address(this), amountOut);
         } else {
-            // mint token pepe, sejumlah pepe, dikirim ke position
+            // mint token usdc, sejumlah usdc, dikirim ke position
             TokenSwap(_tokenTo).mint(addressPosition[msg.sender], amountOut);
         }
 
